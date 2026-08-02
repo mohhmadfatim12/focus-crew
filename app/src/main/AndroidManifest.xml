@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Permissions for Dynamic Island overlay and lock-screen notification -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Declare query capability to discover launchable user apps for the block picker -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.FocusCrew">
+
+        <!-- Main Dashboard Screen -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.FocusCrew">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Calm Interception Screen -->
+        <activity
+            android:name=".ui.blocker.CalmBlockActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.FocusCrew" />
+
+        <!-- NeuroShield Trance-Breaker Reality Check Screen -->
+        <activity
+            android:name=".ui.reel.TranceBreakerActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.FocusCrew" />
+
+        <!-- Foreground App Detection Service (Accessibility) -->
+        <service
+            android:name=".service.BlockerAccessibilityService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/blocker_accessibility_service_config" />
+        </service>
+
+        <!-- Nuclear VPN DNS Filter Service (Local DNS interception for adult domain blocking) -->
+        <service
+            android:name=".service.FocusCrewVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
+        <!-- Weekly Reel Schedule Notifications & Sunday Midnight Reset -->
+        <receiver
+            android:name=".service.WeeklyReelNotificationReceiver"
+            android:exported="false" />
+
+        <!-- Quick Pause & Resume Actions for Active Focus Timer Notification -->
+        <receiver
+            android:name=".service.TimerActionReceiver"
+            android:exported="false" />
+
+        <!-- FileProvider to share APK installer directly via WhatsApp -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- 1-Tap Home Screen Urge Breaker (SOS) Widget -->
+        <receiver
+            android:name=".widget.UrgeBreakerAppWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_urge_breaker_info" />
+        </receiver>
+
+    </application>
+
+</manifest>
