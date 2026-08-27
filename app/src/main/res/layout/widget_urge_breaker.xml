@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="12dp"
+    android:gravity="center">
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🛡️ TITAN SHIELD"
+        android:textColor="#94A3B8"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.08" />
+
+    <TextView
+        android:id="@+id/widget_streak"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Clean &amp; Unbroken"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/btn_emergency_sos"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:text="🚨 DESTROY URGE"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:textSize="12sp"
+        android:background="@drawable/widget_button_bg" />
+
+</LinearLayout>
