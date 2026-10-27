@@ -2,9 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions for Dynamic Island overlay and lock-screen notification -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
 
@@ -54,6 +58,15 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.FocusCrew" />
 
+        <!-- Full-Screen Alarm Activity for Exact Task Alarms -->
+        <activity
+            android:name=".ui.taskalarm.TaskAlarmFullScreenActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.FocusCrew" />
+
         <!-- Foreground App Detection Service (Accessibility) -->
         <service
             android:name=".service.BlockerAccessibilityService"
@@ -88,6 +101,27 @@
             android:name=".service.TimerActionReceiver"
             android:exported="false" />
 
+        <!-- TaskAlarm Alarm Trigger Receiver -->
+        <receiver
+            android:name=".service.taskalarm.TaskAlarmReceiver"
+            android:exported="false" />
+
+        <!-- TaskAlarm Notification Quick Actions (Complete & Snooze) -->
+        <receiver
+            android:name=".service.taskalarm.TaskActionReceiver"
+            android:exported="false" />
+
+        <!-- TaskAlarm Reboot Recovery Receiver -->
+        <receiver
+            android:name=".service.taskalarm.TaskBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
         <!-- FileProvider to share APK installer directly via WhatsApp -->
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -109,6 +143,19 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_urge_breaker_info" />
+        </receiver>
+
+        <!-- TaskAlarm Home Screen Widget -->
+        <receiver
+            android:name=".widget.TaskAlarmAppWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.focuscrew.app.action.UPDATE_TASK_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_task_alarm_info" />
         </receiver>
 
     </application>

@@ -83,6 +83,15 @@ fun AppPickerScreen(
             timerSnapshot.status is TimerStatus.Paused ||
             timerSnapshot.status is TimerStatus.InBreak
 
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
+            context.startService(vpnIntent)
+        }
+    }
+
     var installedApps by remember { mutableStateOf<List<InstalledAppItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
@@ -261,6 +270,8 @@ fun AppPickerScreen(
                             if (prepare == null) {
                                 val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
                                 context.startService(vpnIntent)
+                            } else {
+                                vpnPermissionLauncher.launch(prepare)
                             }
                         } else {
                             val vpnIntent = Intent(context, FocusCrewVpnService::class.java).apply {

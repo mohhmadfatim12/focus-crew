@@ -87,9 +87,12 @@ import com.focuscrew.app.service.AppSecurityManager
 import com.focuscrew.app.ui.freedom.FreedomVaultScreen
 import com.focuscrew.app.ui.paywall.PaywallScreen
 import com.focuscrew.app.ui.security.AppLockScreen
+import com.focuscrew.app.data.repository.TaskAlarmRepository
+import com.focuscrew.app.ui.taskalarm.TaskAlarmScreen
 
 enum class AppScreen {
     TIMER,
+    TASK_ALARM,
     REEL_COUNTER,
     APP_PICKER,
     HISTORY,
@@ -200,6 +203,7 @@ private fun MainContent(
     val context = LocalContext.current
     val database = remember { FocusDatabase.getInstance(context.applicationContext) }
     val repository = remember { FocusRepository(database) }
+    val taskAlarmRepository = remember { TaskAlarmRepository(database.taskAlarmDao(), context.applicationContext) }
     val isServiceConnected by BlockerManager.isServiceConnected.collectAsState()
     val reelStats by ReelCounterManager.stats.collectAsState()
 
@@ -295,6 +299,7 @@ private fun MainContent(
 
     val screenTitle = when (currentScreen) {
         AppScreen.TIMER -> "FocusCrew"
+        AppScreen.TASK_ALARM -> "Task Alarm"
         AppScreen.REEL_COUNTER -> "Reel Counter"
         AppScreen.APP_PICKER -> "App Blocker"
         AppScreen.HISTORY -> "Stats & Streaks"
@@ -356,6 +361,43 @@ private fun MainContent(
                     onClick = {
                         currentScreen = AppScreen.TIMER
                         onScreenChange(AppScreen.TIMER)
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = NavigationDrawerItemDefaults.colors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+
+                // Menu Item: Task Alarm (User requested: TaskAlarm feature in FocusCrew)
+                NavigationDrawerItem(
+                    label = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Task Alarm", fontWeight = FontWeight.SemiBold)
+                            Box(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "⏰ Alarms",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    },
+                    icon = { Text("⏰", fontSize = 18.sp) },
+                    selected = currentScreen == AppScreen.TASK_ALARM,
+                    onClick = {
+                        currentScreen = AppScreen.TASK_ALARM
+                        onScreenChange(AppScreen.TASK_ALARM)
                         scope.launch { drawerState.close() }
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
@@ -570,6 +612,17 @@ private fun MainContent(
                     )
 
                     NavigationBarItem(
+                        selected = currentScreen == AppScreen.TASK_ALARM,
+                        onClick = {
+                            currentScreen = AppScreen.TASK_ALARM
+                            onScreenChange(AppScreen.TASK_ALARM)
+                        },
+                        icon = { Text("⏰", fontSize = 18.sp) },
+                        label = { Text("Tasks") },
+                        colors = navItemColors
+                    )
+
+                    NavigationBarItem(
                         selected = currentScreen == AppScreen.REEL_COUNTER,
                         onClick = {
                             currentScreen = AppScreen.REEL_COUNTER
@@ -616,6 +669,16 @@ private fun MainContent(
                             .padding(innerPadding)
                     )
                 }
+
+                AppScreen.TASK_ALARM -> {
+                    TaskAlarmScreen(
+                        repository = taskAlarmRepository,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    )
+                }
+
 
                 AppScreen.REEL_COUNTER -> {
                     ReelCounterScreen(

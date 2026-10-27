@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,6 +55,7 @@ import com.focuscrew.app.service.AntiPornDefenderManager
 import com.focuscrew.app.service.BlockerManager
 import com.focuscrew.app.service.FocusCrewVpnService
 import com.focuscrew.app.service.FreedomVaultManager
+import com.focuscrew.app.service.UlyssesLockManager
 import com.focuscrew.app.ui.theme.AntiqueHoneyBrass
 import com.focuscrew.app.ui.theme.BritishRacingSage
 import com.focuscrew.app.ui.theme.CashmereCream
@@ -65,20 +67,6 @@ import com.focuscrew.app.ui.theme.WarmLinen
 import com.focuscrew.app.ui.theme.WhisperBorder
 import kotlinx.coroutines.delay
 
-/**
- * TitanAntiPornFortressCard — High-Extreme Master Anti-Porn Blocker (Pure Self-Contained VPN).
- *
- * 100% VPN & LIVE DEFENSE (Zero Manual DNS Configuration):
- *  1. Self-Contained Split-Tunnel Loopback VPN (1000+ porn domains blackholed to 0.0.0.0)
- *  2. SafeSearch VIP Server-Lock (Google 216.239.38.120, Bing, DuckDuckGo)
- *     -> Forces SafeSearch permanently on at server level; explicit photos & sex videos cannot load.
- *  3. SafeSearch Anti-Tamper Guard:
- *     -> Prevents user from accessing or turning off SafeSearch in Google / browsers.
- *  4. Live Search & Browser Interceptor (Chrome, Brave, Opera, Edge, Samsung Internet, Firefox)
- *     -> 4-layer engine catches 'sex', 'sex videos', 'hot sex', 'porn', 'xxx', and adult keywords.
- *  5. Zero-Leak Incognito Blocker (instantly terminates private browser sessions).
- *  6. 100% Full Speed Normal Browsing (normal sites, banking, apps, YouTube bypass untouched).
- */
 @Composable
 fun TitanAntiPornFortressCard() {
     val context = LocalContext.current
@@ -88,19 +76,17 @@ fun TitanAntiPornFortressCard() {
     val domainsBlocked by FocusCrewVpnService.domainsBlockedCount.collectAsState()
     val blockedSearches by AntiPornDefenderManager.blockedSearchesCount.collectAsState()
 
-    // Master state: Active if VPN or Defender is running
     val isFortressActive = isVpnRunning || isDefenderActive
+    val ulyssesState by UlyssesLockManager.state.collectAsState()
 
-    val ulyssesState by com.focuscrew.app.service.UlyssesLockManager.state.collectAsState()
     var showDeactivateDialog by remember { mutableStateOf(false) }
     var showUlyssesCoolDownDialog by remember { mutableStateOf(false) }
     var showPurgeConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        com.focuscrew.app.service.UlyssesLockManager.initialize(context)
+        UlyssesLockManager.initialize(context)
     }
 
-    // Launcher for Android OS VPN Permission Dialog
     val vpnPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -108,24 +94,21 @@ fun TitanAntiPornFortressCard() {
             armAllDefenses(context)
             val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
             context.startService(vpnIntent)
-            Toast.makeText(context, "🛡️ TITAN VPN ARMED: 100% Extreme Protection Active!", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "🛡️ Shield Armed: Protection Active!", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "VPN activation cancelled.", Toast.LENGTH_SHORT).show()
         }
     }
 
     val trigger1ClickMasterActivation: () -> Unit = {
-        // Arm Defender, SafeSearch VIP, and Incognito Blocker
         armAllDefenses(context)
-
-        // Prepare and start Self-Contained High-Extreme VPN
         val prepareIntent = VpnService.prepare(context)
         if (prepareIntent != null) {
             vpnPermissionLauncher.launch(prepareIntent)
         } else {
             val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
             context.startService(vpnIntent)
-            Toast.makeText(context, "🛡️ TITAN VPN ARMED: 100% Extreme Protection Active!", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "🛡️ Shield Armed: Protection Active!", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -135,10 +118,9 @@ fun TitanAntiPornFortressCard() {
             action = "STOP_VPN"
         }
         context.startService(vpnIntent)
-        Toast.makeText(context, "Titan Fortress deactivated.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Dopamine Shield deactivated.", Toast.LENGTH_SHORT).show()
     }
 
-    // Auto-arm VPN if defenses are active and permission is already granted
     LaunchedEffect(isFortressActive, isVpnRunning) {
         if (isFortressActive && !isVpnRunning) {
             val prepareIntent = VpnService.prepare(context)
@@ -151,15 +133,15 @@ fun TitanAntiPornFortressCard() {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = DaylightPaper),
         border = androidx.compose.foundation.BorderStroke(
-            if (isFortressActive) 1.5.dp else 1.dp,
-            if (isFortressActive) BritishRacingSage.copy(alpha = 0.5f) else WhisperBorder
+            1.dp,
+            if (isFortressActive) BritishRacingSage.copy(alpha = 0.4f) else WhisperBorder
         )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Header
+            // Master Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -168,34 +150,44 @@ fun TitanAntiPornFortressCard() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(34.dp)
                             .background(
-                                if (isFortressActive) BritishRacingSage.copy(alpha = 0.15f)
-                                else TerracottaClay.copy(alpha = 0.12f),
+                                if (isFortressActive) BritishRacingSage.copy(alpha = 0.12f)
+                                else TerracottaClay.copy(alpha = 0.1f),
                                 CircleShape
                             ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = if (isFortressActive) "🛡️" else "⚡",
-                            fontSize = 24.sp
+                            fontSize = 16.sp
                         )
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "DOPAMINE DETOX SHIELD",
-                            fontSize = 16.sp,
+                            text = "Dopamine Shield",
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = SoftEspressoInk,
-                            letterSpacing = 0.5.sp
+                            color = SoftEspressoInk
                         )
-                        Text(
-                            text = if (isFortressActive) "Dopamine Protection • 100% Active" else "1-Click Focus & Detox Shield",
-                            fontSize = 12.sp,
-                            color = if (isFortressActive) BritishRacingSage else MutedCharcoalOlive,
-                            fontWeight = if (isFortressActive) FontWeight.SemiBold else FontWeight.Normal
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(
+                                        if (isFortressActive) BritishRacingSage else MutedCharcoalOlive,
+                                        CircleShape
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isFortressActive) "Active & Enforcing" else "Disarmed",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isFortressActive) BritishRacingSage else MutedCharcoalOlive
+                            )
+                        }
                     }
                 }
 
@@ -206,7 +198,7 @@ fun TitanAntiPornFortressCard() {
                             trigger1ClickMasterActivation()
                         } else {
                             if (ulyssesState.isEnabled) {
-                                if (com.focuscrew.app.service.UlyssesLockManager.isEligibleToDeactivate()) {
+                                if (UlyssesLockManager.isEligibleToDeactivate()) {
                                     showDeactivateDialog = true
                                 } else {
                                     showUlyssesCoolDownDialog = true
@@ -225,309 +217,286 @@ fun TitanAntiPornFortressCard() {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (!isFortressActive) {
-                // ── OFF STATE: 1-CLICK ACTIVATION HERO ──
+                // OFF STATE: 1-Click Compact Button
                 Button(
                     onClick = trigger1ClickMasterActivation,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BritishRacingSage)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BritishRacingSage),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "⚡ ACTIVATE DOPAMINE DETOX (1-CLICK)",
-                        fontSize = 14.sp,
+                        text = "⚡ Arm Dopamine Shield (1-Click)",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "High-focus dopamine protection shield. Permanently locks Google & Bing SafeSearch VIP so high-dopamine distractions cannot load, blackholes 1000+ distraction websites, and filters unhealthy search triggers. Zero manual setup required.",
+                    text = "Locks SafeSearch, blocks 1000+ adult domains & filters incognito mode.",
                     fontSize = 11.sp,
                     color = MutedCharcoalOlive,
-                    lineHeight = 16.sp
+                    lineHeight = 15.sp
                 )
             } else {
-                // ── ACTIVE STATE: 10X TELEMETRY STATUS ──
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(BritishRacingSage.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-                        .border(1.dp, BritishRacingSage.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                        .padding(14.dp)
-                ) {
-                    Column {
+                // ACTIVE STATE: Sleek Compact Telemetry
+
+                // Alerts if background services need attention
+                if (!isVpnRunning) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(TerracottaClay.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                            .border(1.dp, TerracottaClay.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .background(BritishRacingSage, CircleShape)
-                                )
+                                Text("⚠️", fontSize = 12.sp)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "DETOX ENFORCING",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = BritishRacingSage
+                                    text = "VPN Shield Disarmed",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TerracottaClay
                                 )
                             }
-                            Text(
-                                text = "${domainsBlocked + blockedSearches} Distractions Filtered",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BritishRacingSage
-                            )
-                        }
-
-                        if (!isVpnRunning) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { trigger1ClickMasterActivation() },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = TerracottaClay.copy(alpha = 0.12f)),
-                                border = androidx.compose.foundation.BorderStroke(1.5.dp, TerracottaClay)
+                            Button(
+                                onClick = trigger1ClickMasterActivation,
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = TerracottaClay),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("⚠️", fontSize = 20.sp)
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
-                                            Text(
-                                                text = "VPN Network Shield Not Running",
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = TerracottaClay
-                                            )
-                                            Text(
-                                                text = "Tap to arm VPN for SafeSearch VIP & 1000+ domain blackhole",
-                                                fontSize = 11.sp,
-                                                color = SoftEspressoInk
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Button(
-                                        onClick = trigger1ClickMasterActivation,
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = TerracottaClay),
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Text("ARM VPN", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    }
-                                }
+                                Text("Arm", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // High-Focus Telemetry List
-                        if (isVpnRunning) {
-                            FortressLayerRow("✓ Titan VPN Network Shield", "100% Active • SafeSearch VIP & 1000+ Domains Blocked", BritishRacingSage)
-                        } else {
-                            FortressLayerRow("⚠️ Titan VPN Network Shield", "DISARMED (Tap 'ARM VPN' button above)", TerracottaClay)
-                        }
-                        if (isAccessibilityConnected && isDefenderActive) {
-                            FortressLayerRow("✓ Accessibility Screen Interceptor", "100% Active • Live Search & Keyword Interception", BritishRacingSage)
-                        } else if (!isAccessibilityConnected) {
-                            FortressLayerRow(
-                                "⚠️ Accessibility Screen Interceptor",
-                                "SERVICE OFF • Tap to enable FocusCrew in Accessibility Settings",
-                                TerracottaClay,
+                if (!isAccessibilityConnected) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(AntiqueHoneyBrass.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                            .border(1.dp, AntiqueHoneyBrass.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("ℹ️", fontSize = 12.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Accessibility Interceptor Off",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AntiqueHoneyBrass
+                                )
+                            }
+                            Button(
                                 onClick = {
                                     try {
                                         context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
                                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         })
                                     } catch (_: Exception) {}
-                                }
-                            )
-                        } else {
-                            FortressLayerRow("⚠️ Accessibility Screen Interceptor", "DEFENDER PAUSED • Toggle switch above to arm", TerracottaClay)
-                        }
-                        FortressLayerRow("✓ SafeSearch Anti-Tamper", "SafeSearch Settings Protected (Cannot Turn Off)", BritishRacingSage)
-                        FortressLayerRow("✓ Distraction Mode Blocker", "Incognito / Secret Tabs Terminated Instantly", SoftEspressoInk)
-                        FortressLayerRow("✓ Normal Searches & Apps", "100% Full Speed • Zero Lag", BritishRacingSage)
-                    }
-                }
-
-                // 24-Hour Ulysses Lock Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = WarmLinen),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, WhisperBorder)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("⏳", fontSize = 18.sp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "24-Hour Ulysses Lock",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SoftEspressoInk
-                                    )
-                                    Text(
-                                        text = if (ulyssesState.isEnabled) "Deactivation requires 24h delay" else "Instant toggle permitted",
-                                        fontSize = 11.sp,
-                                        color = MutedCharcoalOlive
-                                    )
-                                }
-                            }
-
-                            Switch(
-                                checked = ulyssesState.isEnabled,
-                                onCheckedChange = { enable ->
-                                    if (enable) {
-                                        com.focuscrew.app.service.UlyssesLockManager.enable()
-                                        Toast.makeText(context, "🔒 Ulysses Lock Armed: 24h delay enforced before shield can be disabled.", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        if (com.focuscrew.app.service.UlyssesLockManager.isEligibleToDeactivate()) {
-                                            com.focuscrew.app.service.UlyssesLockManager.completeDeactivation()
-                                            Toast.makeText(context, "Ulysses Lock disabled.", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            showUlyssesCoolDownDialog = true
-                                        }
-                                    }
                                 },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = AntiqueHoneyBrass
-                                )
-                            )
-                        }
-
-                        if (ulyssesState.isPendingDeactivation) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            val remainingMs = com.focuscrew.app.service.UlyssesLockManager.getRemainingCoolDownMs()
-                            val hours = remainingMs / (3600 * 1000)
-                            val mins = (remainingMs % (3600 * 1000)) / (60 * 1000)
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(TerracottaClay.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-                                    .border(1.dp, TerracottaClay.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
-                                    .padding(10.dp)
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AntiqueHoneyBrass),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp)
                             ) {
-                                Column {
-                                    Text(
-                                        text = "⏳ Unlock In Progress: ${hours}h ${mins}m left",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TerracottaClay
-                                    )
-                                    Text(
-                                        text = "Protection remains 100% active. Sleep on it.",
-                                        fontSize = 11.sp,
-                                        color = SoftEspressoInk
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    OutlinedButton(
-                                        onClick = {
-                                            com.focuscrew.app.service.UlyssesLockManager.cancelDeactivation()
-                                            Toast.makeText(context, "Deactivation cancelled! Shield unbroken. 🛡️", Toast.LENGTH_SHORT).show()
-                                        },
-                                        modifier = Modifier.fillMaxWidth().height(36.dp),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text("Cancel Request & Stay Strong", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BritishRacingSage)
-                                    }
-                                }
+                                Text("Enable", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Purge Browser History Action
-                OutlinedButton(
-                    onClick = { showPurgeConfirmation = true },
+                // Compact 3-Pill Status Grid
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, WhisperBorder)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "🧹 Purge Browser Search History",
-                        fontSize = 12.sp,
-                        color = SoftEspressoInk,
-                        fontWeight = FontWeight.SemiBold
+                    CompactStatusPill(
+                        icon = "🔒",
+                        label = "SafeSearch",
+                        status = "Locked",
+                        modifier = Modifier.weight(1f)
+                    )
+                    CompactStatusPill(
+                        icon = "🛡️",
+                        label = "Domains",
+                        status = "${domainsBlocked + blockedSearches} blocked",
+                        modifier = Modifier.weight(1f)
+                    )
+                    CompactStatusPill(
+                        icon = "🚫",
+                        label = "Incognito",
+                        status = "Filtered",
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Turn Off Button (With Friction Dialog)
-                OutlinedButton(
-                    onClick = {
-                        if (ulyssesState.isEnabled) {
-                            if (com.focuscrew.app.service.UlyssesLockManager.isEligibleToDeactivate()) {
-                                showDeactivateDialog = true
-                            } else {
-                                showUlyssesCoolDownDialog = true
-                            }
-                        } else {
-                            showDeactivateDialog = true
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, TerracottaClay.copy(alpha = 0.3f))
+                // Compact 24h Ulysses Lock Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(WarmLinen, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Turn Off Dopamine Detox",
-                        fontSize = 12.sp,
-                        color = TerracottaClay,
-                        fontWeight = FontWeight.SemiBold
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⏳", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "24-Hour Ulysses Lock",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SoftEspressoInk
+                            )
+                            Text(
+                                text = if (ulyssesState.isEnabled) "24h delay enforced" else "Instant toggle permitted",
+                                fontSize = 10.sp,
+                                color = MutedCharcoalOlive
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = ulyssesState.isEnabled,
+                        onCheckedChange = { enable ->
+                            if (enable) {
+                                UlyssesLockManager.enable()
+                                Toast.makeText(context, "🔒 Ulysses Lock Armed: 24h delay enforced.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                if (UlyssesLockManager.isEligibleToDeactivate()) {
+                                    UlyssesLockManager.completeDeactivation()
+                                    Toast.makeText(context, "Ulysses Lock disabled.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    showUlyssesCoolDownDialog = true
+                                }
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = AntiqueHoneyBrass
+                        )
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(14.dp))
+                if (ulyssesState.isPendingDeactivation) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val remainingMs = UlyssesLockManager.getRemainingCoolDownMs()
+                    val hours = remainingMs / (3600 * 1000)
+                    val mins = (remainingMs % (3600 * 1000)) / (60 * 1000)
 
-            // Multi-Layer Badges (Balanced 4-Column Grid)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                FortressBadge("🌐 Websites", isFortressActive, modifier = Modifier.weight(1f))
-                FortressBadge("🖼️ Photos", isFortressActive, modifier = Modifier.weight(1f))
-                FortressBadge("🎬 Videos", isFortressActive, modifier = Modifier.weight(1f))
-                FortressBadge("🔒 SafeSearch", isFortressActive, modifier = Modifier.weight(1f))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(TerracottaClay.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "⏳ Unlock in: ${hours}h ${mins}m",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TerracottaClay
+                        )
+                        TextButton(
+                            onClick = {
+                                UlyssesLockManager.cancelDeactivation()
+                                Toast.makeText(context, "Cancelled! Shield stays active.", Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            modifier = Modifier.height(26.dp)
+                        ) {
+                            Text("Keep Armed", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = BritishRacingSage)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Bottom Quick Action Buttons (Compact Row)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showPurgeConfirmation = true },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, WhisperBorder)
+                    ) {
+                        Text(
+                            text = "🧹 Clear History",
+                            fontSize = 11.sp,
+                            color = SoftEspressoInk,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (ulyssesState.isEnabled) {
+                                if (UlyssesLockManager.isEligibleToDeactivate()) {
+                                    showDeactivateDialog = true
+                                } else {
+                                    showUlyssesCoolDownDialog = true
+                                }
+                            } else {
+                                showDeactivateDialog = true
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TerracottaClay.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = "Turn Off",
+                            fontSize = 11.sp,
+                            color = TerracottaClay,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
     }
 
-    // Deactivation Reflection Challenge Dialog (Anti-Impulse Protection)
+    // Deactivation Reflection Challenge Dialog
     if (showDeactivateDialog) {
         DeactivateFortressDialog(
             onConfirmDeactivate = {
@@ -540,7 +509,7 @@ fun TitanAntiPornFortressCard() {
 
     // 24-Hour Ulysses Cool-Down Dialog
     if (showUlyssesCoolDownDialog) {
-        val remainingMs = com.focuscrew.app.service.UlyssesLockManager.getRemainingCoolDownMs()
+        val remainingMs = UlyssesLockManager.getRemainingCoolDownMs()
         val isPending = ulyssesState.isPendingDeactivation
         val hours = remainingMs / (3600 * 1000)
         val mins = (remainingMs % (3600 * 1000)) / (60 * 1000)
@@ -549,58 +518,50 @@ fun TitanAntiPornFortressCard() {
             onDismissRequest = { showUlyssesCoolDownDialog = false },
             title = {
                 Text(
-                    text = "⏳ 24-Hour Ulysses Lock Enforced",
+                    text = "⏳ 24-Hour Ulysses Lock",
                     fontWeight = FontWeight.Bold,
                     color = TerracottaClay
                 )
             },
             text = {
-                Column {
-                    if (isPending) {
-                        Text(
-                            text = "Deactivation request is currently running.\n\nTime remaining: ${hours}h ${mins}m.\n\nProtection remains 100% active to prevent impulsive midnight relapse. Sleep on it and check back tomorrow.",
-                            fontSize = 13.sp,
-                            color = SoftEspressoInk,
-                            lineHeight = 18.sp
-                        )
+                Text(
+                    text = if (isPending) {
+                        "Deactivation in progress. Time left: ${hours}h ${mins}m.\nShield stays active until tomorrow to prevent impulsive relapse."
                     } else {
-                        Text(
-                            text = "You activated the 24-Hour Ulysses Lock to protect your future self.\n\nThe shield cannot be turned off instantly. Would you like to start the 24-hour waiting countdown? You must wait 24 hours (until tomorrow) before you can deactivate the fortress.",
-                            fontSize = 13.sp,
-                            color = SoftEspressoInk,
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
+                        "Ulysses Lock is active. A 24-hour waiting period is required before turning off the shield."
+                    },
+                    fontSize = 13.sp,
+                    color = SoftEspressoInk
+                )
             },
             confirmButton = {
                 if (isPending) {
                     Button(
                         onClick = {
-                            com.focuscrew.app.service.UlyssesLockManager.cancelDeactivation()
+                            UlyssesLockManager.cancelDeactivation()
                             showUlyssesCoolDownDialog = false
-                            Toast.makeText(context, "Deactivation cancelled! Shield unbroken. 🛡️", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Cancelled! Shield unbroken. 🛡️", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = BritishRacingSage)
                     ) {
-                        Text("Cancel Request & Stay Strong", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Stay Strong", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 } else {
                     Button(
                         onClick = {
-                            com.focuscrew.app.service.UlyssesLockManager.requestDeactivation()
+                            UlyssesLockManager.requestDeactivation()
                             showUlyssesCoolDownDialog = false
-                            Toast.makeText(context, "24-Hour Countdown Started. Protection remains active.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "24-Hour Countdown Started.", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = TerracottaClay)
                     ) {
-                        Text("Start 24-Hour Countdown", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Start 24h Delay", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUlyssesCoolDownDialog = false }) {
-                    Text("Keep Fortress Armed", color = BritishRacingSage, fontWeight = FontWeight.Bold)
+                    Text("Cancel", color = MutedCharcoalOlive)
                 }
             },
             containerColor = DaylightPaper
@@ -613,17 +574,16 @@ fun TitanAntiPornFortressCard() {
             onDismissRequest = { showPurgeConfirmation = false },
             title = {
                 Text(
-                    text = "🧹 Purge Browser Search History",
+                    text = "🧹 Clear Browser History",
                     fontWeight = FontWeight.Bold,
                     color = SoftEspressoInk
                 )
             },
             text = {
                 Text(
-                    text = "This will open your browser's Clear Browsing Data screen so you can permanently wipe all cached search history, previews, and cookies in 1 tap.",
-                    fontSize = 13.sp,
-                    color = MutedCharcoalOlive,
-                    lineHeight = 18.sp
+                    text = "This opens your browser's Clear Browsing Data screen to wipe cached searches and history.",
+                    fontSize = 12.sp,
+                    color = MutedCharcoalOlive
                 )
             },
             confirmButton = {
@@ -634,7 +594,7 @@ fun TitanAntiPornFortressCard() {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BritishRacingSage)
                 ) {
-                    Text("Open Clear History", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Open Browser Settings", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -648,55 +608,42 @@ fun TitanAntiPornFortressCard() {
 }
 
 @Composable
-private fun FortressLayerRow(
+private fun CompactStatusPill(
+    icon: String,
     label: String,
-    value: String,
-    color: Color,
-    onClick: (() -> Unit)? = null
+    status: String,
+    modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-            .padding(vertical = 3.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color)
-        }
-        Text(value, fontSize = 10.sp, color = MutedCharcoalOlive, lineHeight = 13.sp)
-    }
-}
-
-@Composable
-private fun FortressBadge(label: String, isActive: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .background(
-                if (isActive) BritishRacingSage.copy(alpha = 0.12f) else WarmLinen,
-                RoundedCornerShape(8.dp)
-            )
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .background(WarmLinen, RoundedCornerShape(8.dp))
+            .border(1.dp, WhisperBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-            color = if (isActive) BritishRacingSage else MutedCharcoalOlive,
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(icon, fontSize = 11.sp)
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = label,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SoftEspressoInk,
+                    maxLines = 1
+                )
+            }
+            Text(
+                text = status,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                color = BritishRacingSage,
+                maxLines = 1
+            )
+        }
     }
 }
 
-/**
- * 10-Second Anti-Impulse Challenge Dialog before allowing Fortress deactivation.
- * Ensures the user cannot break the blocker in a moment of weakness.
- */
 @Composable
 private fun DeactivateFortressDialog(
     onConfirmDeactivate: () -> Unit,
@@ -717,7 +664,7 @@ private fun DeactivateFortressDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "⚠️ Deactivate Dopamine Detox?",
+                text = "⚠️ Turn Off Shield?",
                 fontWeight = FontWeight.Bold,
                 color = TerracottaClay
             )
@@ -725,17 +672,16 @@ private fun DeactivateFortressDialog(
         text = {
             Column {
                 Text(
-                    text = "Turning off Dopamine Detox will remove Safe Search enforcement and allow high-dopamine distraction triggers back onto your device.",
-                    fontSize = 13.sp,
-                    color = SoftEspressoInk,
-                    lineHeight = 18.sp
+                    text = "Disabling will remove SafeSearch and adult content filters.",
+                    fontSize = 12.sp,
+                    color = SoftEspressoInk
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = if (!isCountdownComplete) {
-                        "Pause and breathe. Cool-down timer: ${countdownSeconds}s..."
+                        "Pause and breathe: ${countdownSeconds}s..."
                     } else {
-                        "Cool-down finished. Are you absolutely sure you want to turn it off?"
+                        "Are you sure you want to proceed?"
                     },
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -753,7 +699,7 @@ private fun DeactivateFortressDialog(
                 )
             ) {
                 Text(
-                    text = if (isCountdownComplete) "Turn Off Now" else "Wait ${countdownSeconds}s",
+                    text = if (isCountdownComplete) "Turn Off" else "Wait ${countdownSeconds}s",
                     color = if (isCountdownComplete) Color.White else MutedCharcoalOlive,
                     fontWeight = FontWeight.Bold
                 )
@@ -761,7 +707,7 @@ private fun DeactivateFortressDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Keep Shield On", color = BritishRacingSage, fontWeight = FontWeight.Bold)
+                Text("Keep On", color = BritishRacingSage, fontWeight = FontWeight.Bold)
             }
         },
         containerColor = DaylightPaper

@@ -3,11 +3,12 @@ package com.focuscrew.app.service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.focuscrew.app.domain.AdultDomainBlocklist
-import com.focuscrew.app.domain.FuzzyAdultContentDetector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,30 +21,28 @@ import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
 /**
- * FocusCrewVpnService — High-Performance Local DNS Filter (Nuclear Shield).
+ * FocusCrewVpnService — Dedicated Browser-Only DNS Filter.
  *
- * ARCHITECTURE (Split-Tunnel DNS Only):
- *   - Only DNS queries (traffic to 10.245.0.2 / 8.8.8.8 / 1.1.1.1 on port 53) enter this tunnel.
- *   - 0.0.0.0/0 is NEVER routed through the VPN!
- *   - All HTTP, HTTPS, TCP, web browsing, streaming, and normal app traffic flow
- *     directly over Wi-Fi / Mobile data at 100% native hardware speed with ZERO latency.
+ * ARCHITECTURE (Per-App Split-Tunnel — Browsers Only):
+ *   - The VPN is STRICTLY restricted via `addAllowedApplication` to Web Browsers
+ *     (Chrome, Brave, Samsung Internet, Edge, Firefox, Opera, etc.).
+ *   - ALL other applications (WhatsApp, Free Fire, PUBG, games, banking, YouTube, Instagram)
+ *     100% BYPASS the VPN interface! They connect directly over native Wi-Fi/Mobile data
+ *     with ZERO latency, 0ms ping, and no disruptions whatsoever.
  *
- * ADULT BLOCKING & SAFESEARCH:
+ * WEB RESEARCH & ADULT FILTERING:
  *   1. 1000+ Adult Domain Database -> Instant 0.0.0.0 blackhole (0ms).
- *   2. FuzzyAdultContentDetector -> Real-time domain heuristic check.
- *   3. Google SafeSearch VIP -> Forces 216.239.38.120 (Google SafeSearch locked permanently).
- *   4. Bing SafeSearch VIP -> Forces 204.79.197.220 (strict.bing.com).
- *   5. DuckDuckGo SafeSearch VIP -> Forces 52.142.124.215 (safe.duckduckgo.com).
- *   6. Clean domains -> Forwarded upstream to Cloudflare Family (1.1.1.3) with
- *      CleanBrowsing (185.228.168.168) and Google DNS (8.8.8.8) fallback.
- *
- * 100% Offline filter. Multi-threaded with thread-safe output streaming.
+ *   2. DoH Bootstrap Domains -> Blackholed to enforce local DNS in browsers.
+ *   3. Google Web Search & Research -> Routed directly through Tier-1 Anycast DNS
+ *      (Cloudflare 1.1.1.1 & Google 8.8.8.8) to guarantee instant search response,
+ *      zero connection timeouts, and zero CAPTCHAs.
+ *   4. Clean domains -> Forwarded to ultra-fast Anycast resolvers with in-memory caching.
  */
 class FocusCrewVpnService : VpnService() {
 
     companion object {
         private const val TAG = "FocusCrewVPN"
-        private const val VPN_SESSION_NAME = "FocusCrew Nuclear Shield"
+        private const val VPN_SESSION_NAME = "FocusCrew Browser Shield"
         private const val PREFS_NAME = "focuscrew_vpn_dns_filter"
         private const val KEY_VPN_ENABLED = "vpn_dns_filter_enabled"
         private const val KEY_DOMAINS_BLOCKED_COUNT = "domains_blocked_count"
@@ -54,20 +53,19 @@ class FocusCrewVpnService : VpnService() {
         private const val DNS_PORT = 53
         private const val MAX_PACKET_SIZE = 4096
 
-        // Upstream resolvers (Tier-1 high-speed DNS: Cloudflare + Google for ultra-low latency streaming & gaming)
+        // Upstream resolvers: Tier-1 Anycast DNS for blazing fast web research
         private val UPSTREAM_DNS_SERVERS = listOf(
-            "1.1.1.1",         // Cloudflare DNS Primary (~5ms)
-            "8.8.8.8",         // Google DNS Primary (~20ms)
-            "1.0.0.1",         // Cloudflare DNS Secondary
+            "1.1.1.1",         // Cloudflare DNS Primary (~5-15ms Anycast)
+            "8.8.8.8",         // Google DNS Primary (~10-20ms Anycast)
+            "1.0.0.1",         // Cloudflare Secondary
             "8.8.4.4"          // Google DNS Secondary
         )
 
         // In-memory DNS Cache (Key: "$domain:$queryType" -> Pair<ResponseByteArray, TimestampMs>)
-        // Delivers 0ms responses for repeated queries in gaming and social media!
         private val dnsCache = java.util.concurrent.ConcurrentHashMap<String, Pair<ByteArray, Long>>()
-        private const val DNS_CACHE_TTL_MS = 60_000L // 60 seconds (prevents stale CDN records for YouTube/video)
+        private const val DNS_CACHE_TTL_MS = 60_000L // 60 seconds
 
-        // ── Static State for UI ──
+        // Static State for UI
         private val _isVpnRunning = MutableStateFlow(false)
         val isVpnRunning: StateFlow<Boolean> = _isVpnRunning.asStateFlow()
 
@@ -122,21 +120,33 @@ class FocusCrewVpnService : VpnService() {
             builder.setSession(VPN_SESSION_NAME)
             builder.setMtu(1500)
             builder.addAddress(VPN_LOCAL_IP, 32)
-
-            // Direct device DNS to our local virtual DNS endpoint
             builder.addDnsServer(DNS_VIRTUAL_SERVER)
-
-            // ROUTE ONLY OUR VIRTUAL DNS SERVER — NEVER ROUTE 0.0.0.0/0 OR PUBLIC DNS IPS!
-            // This guarantees normal web, streaming, TCP, QUIC, and app traffic is 100% untouched!
             builder.addRoute(DNS_VIRTUAL_SERVER, 32)
-
             builder.setBlocking(true)
 
-            // Exclude our own app from the VPN so upstream queries bypass the tunnel
-            try {
-                builder.addDisallowedApplication(packageName)
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not exclude package from VPN: ${e.message}")
+            // STRICT PER-APP SPLIT TUNNEL:
+            // Route ONLY web browsers through the VPN!
+            // WhatsApp, Free Fire, PUBG Mobile, YouTube, Instagram, and all other apps
+            // completely bypass this VPN and run at 100% full speed with zero lag!
+            val allowedBrowsers = getInstalledBrowserPackages(this)
+            Log.d(TAG, "Configuring VPN strictly for browsers (${allowedBrowsers.size} detected): $allowedBrowsers")
+
+            var allowedCount = 0
+            for (pkg in allowedBrowsers) {
+                try {
+                    builder.addAllowedApplication(pkg)
+                    allowedCount++
+                    Log.d(TAG, "VPN restricted to browser: $pkg")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not add allowed browser $pkg: ${e.message}")
+                }
+            }
+
+            // Fallback: If no browser package was allowed, exclude our own app
+            if (allowedCount == 0) {
+                try {
+                    builder.addDisallowedApplication(packageName)
+                } catch (_: Exception) {}
             }
 
             vpnInterface = builder.establish()
@@ -149,12 +159,12 @@ class FocusCrewVpnService : VpnService() {
             isRunning = true
             _isVpnRunning.value = true
             setVpnEnabled(true)
-            Log.d(TAG, "Nuclear DNS Shield started (Split-tunnel DNS mode)")
+            Log.d(TAG, "FocusCrew Browser-Only DNS Shield started successfully")
 
             Thread(::processPackets, "FocusCrewVPN-Reader").start()
 
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start Nuclear DNS Shield: ${e.message}", e)
+            Log.e(TAG, "Failed to start Browser-Only DNS Shield: ${e.message}", e)
             stopVpn()
         }
     }
@@ -171,13 +181,111 @@ class FocusCrewVpnService : VpnService() {
         }
         vpnInterface = null
 
-        Log.d(TAG, "Nuclear DNS Shield stopped")
+        Log.d(TAG, "Browser-Only DNS Shield stopped")
         stopSelf()
     }
 
     /**
+     * Identifies installed web browser packages on the device,
+     * ensuring that games, chat apps, and social media apps are strictly excluded.
+     */
+    private fun getInstalledBrowserPackages(context: Context): List<String> {
+        val browsers = mutableSetOf<String>()
+        val pm = context.packageManager
+
+        // All standard known Android web browsers
+        val knownBrowsers = listOf(
+            "com.android.chrome",
+            "com.chrome.beta",
+            "com.chrome.canary",
+            "com.chrome.dev",
+            "com.brave.browser",
+            "com.brave.browser_nightly",
+            "com.brave.browser_beta",
+            "org.mozilla.firefox",
+            "org.mozilla.firefox_beta",
+            "org.mozilla.fenix",
+            "org.mozilla.focus",
+            "com.sec.android.app.sbrowser",         // Samsung Internet
+            "com.sec.android.app.sbrowser.beta",
+            "com.microsoft.emmx",                   // Microsoft Edge
+            "com.opera.browser",                    // Opera
+            "com.opera.mini.native",                // Opera Mini
+            "com.opera.gx",                         // Opera GX
+            "com.opera.touch",
+            "com.duckduckgo.mobile.android",        // DuckDuckGo
+            "com.vivaldi.browser",                  // Vivaldi
+            "com.kiwibrowser.browser",              // Kiwi Browser
+            "com.ucmobile.intl",                    // UC Browser
+            "com.UCMobile.intl",
+            "mark.via.gp",                          // Via Browser
+            "com.mi.globalbrowser",                 // Mi Browser
+            "com.coloros.browser",                  // Oppo / Realme
+            "com.vivo.browser",                     // Vivo
+            "com.huawei.browser",                   // Huawei
+            "com.transsion.phoenix",                // Phoenix Browser
+            "com.android.browser",                  // AOSP Browser
+            "org.torproject.torbrowser"
+        )
+
+        // 1. Add any installed browsers from the known list
+        for (pkg in knownBrowsers) {
+            try {
+                pm.getPackageInfo(pkg, 0)
+                browsers.add(pkg)
+            } catch (_: Exception) {}
+        }
+
+        // 2. Query system for apps registered to open HTTP / HTTPS web links
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
+            val list = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            for (resolveInfo in list) {
+                val pkg = resolveInfo.activityInfo?.packageName
+                if (pkg != null && pkg != context.packageName && !isExcludedNonBrowser(pkg)) {
+                    try {
+                        pm.getPackageInfo(pkg, 0)
+                        browsers.add(pkg)
+                    } catch (_: Exception) {}
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error resolving browser intent activities: ${e.message}")
+        }
+
+        // Guaranteed fallback to Chrome if nothing was resolved
+        if (browsers.isEmpty()) {
+            browsers.add("com.android.chrome")
+        }
+
+        return browsers.toList()
+    }
+
+    /**
+     * Checks if a package is a game, social media app, or communication tool
+     * that must NEVER be routed through the VPN.
+     */
+    private fun isExcludedNonBrowser(pkg: String): Boolean {
+        val lower = pkg.lowercase()
+        return lower.contains("whatsapp") ||
+               lower.contains("freefire") ||
+               lower.contains("pubg") ||
+               lower.contains("tencent") ||
+               lower.contains("dts") ||
+               lower.contains("game") ||
+               lower.contains("instagram") ||
+               lower.contains("facebook") ||
+               lower.contains("telegram") ||
+               lower.contains("snapchat") ||
+               lower.contains("discord") ||
+               lower.contains("twitter") ||
+               lower.contains("youtube") ||
+               lower.contains("tiktok")
+    }
+
+    /**
      * Reads DNS packets from the TUN interface, analyzes queries,
-     * and sends immediate blackhole / SafeSearch VIP / forwarded responses.
+     * and sends immediate blackhole or forwarded responses.
      */
     private fun processPackets() {
         val vpnFd = vpnInterface ?: return
@@ -224,12 +332,12 @@ class FocusCrewVpnService : VpnService() {
                 val domain = dnsQuery.domain.lowercase()
                 val rawIpPacket = packet.array().copyOf(length)
 
-                // ── 0. WHITELIST CHECK: High-priority bypass for YouTube & Google Services ──
-                // Bypasses all content filters to guarantee 100% smooth streaming & zero disruption
+                // ── 0. WHITELIST CHECK: Guaranteed 100% Fast Path for Google & Research ──
+                // Whitelist Google Search and CDN domains so normal research is NEVER delayed or broken!
                 val isWhitelisted = isWhitelistedDomain(domain)
 
                 if (!isWhitelisted) {
-                    // ── 1. BLOCK DOH (DNS over HTTPS) BOOTSTRAP TO PREVENT BROWSER BYPASS ──
+                    // ── 1. BLOCK DOH (DNS over HTTPS) BOOTSTRAP TO ENFORCE BROWSER DNS ──
                     if (isDohBootstrapDomain(domain)) {
                         Log.d(TAG, "🔒 Blackholing DoH domain to enforce local DNS: $domain")
                         val dnsResponse = DnsPacketParser.buildBlockedResponse(dnsQuery)
@@ -256,49 +364,9 @@ class FocusCrewVpnService : VpnService() {
                         }
                         continue
                     }
-
-                    // ── 3. SAFESEARCH VIP ENFORCEMENT ──
-                    // Locks Google / Bing / DuckDuckGo SafeSearch on the network when enabled
-                    if (AntiPornDefenderManager.isSafeSearchEnforced.value) {
-                        if (isGoogleSearchDomain(domain)) {
-                            Log.d(TAG, "🔒 SafeSearch VIP enforced for Google Search: $domain")
-                            val dnsResponse = DnsPacketParser.buildGoogleSafeSearchResponse(dnsQuery)
-                            val responsePacket = buildResponseIpPacket(rawIpPacket, ipHeaderLength, dnsResponse)
-                            if (responsePacket != null) {
-                                synchronized(outputLock) {
-                                    vpnOutput.write(responsePacket)
-                                }
-                            }
-                            continue
-                        }
-
-                        if (isBingSearchDomain(domain)) {
-                            Log.d(TAG, "🔒 SafeSearch VIP enforced for Bing: $domain")
-                            val dnsResponse = DnsPacketParser.buildBingSafeSearchResponse(dnsQuery)
-                            val responsePacket = buildResponseIpPacket(rawIpPacket, ipHeaderLength, dnsResponse)
-                            if (responsePacket != null) {
-                                synchronized(outputLock) {
-                                    vpnOutput.write(responsePacket)
-                                }
-                            }
-                            continue
-                        }
-
-                        if (isDuckDuckGoDomain(domain)) {
-                            Log.d(TAG, "🔒 SafeSearch VIP enforced for DuckDuckGo: $domain")
-                            val dnsResponse = DnsPacketParser.buildDuckDuckGoSafeSearchResponse(dnsQuery)
-                            val responsePacket = buildResponseIpPacket(rawIpPacket, ipHeaderLength, dnsResponse)
-                            if (responsePacket != null) {
-                                synchronized(outputLock) {
-                                    vpnOutput.write(responsePacket)
-                                }
-                            }
-                            continue
-                        }
-                    }
                 }
 
-                // ── 4. CLEAN / WHITELISTED DOMAIN: Check 0ms in-memory cache with queryType key ──
+                // ── 3. CLEAN / RESEARCH / GOOGLE DOMAIN: Check in-memory 0ms cache ──
                 val cacheKey = "$domain:${dnsQuery.queryType}"
                 val cached = dnsCache[cacheKey]
                 val now = System.currentTimeMillis()
@@ -313,7 +381,7 @@ class FocusCrewVpnService : VpnService() {
                     continue
                 }
 
-                // ── 5. Forward asynchronously to Tier-1 High-Speed DNS (Cloudflare 1.1.1.1 / Google 8.8.8.8) ──
+                // ── 4. Forward asynchronously to Tier-1 High-Speed DNS (Cloudflare 1.1.1.1 / Google 8.8.8.8) ──
                 forwardExecutor.execute {
                     try {
                         val responsePayload = forwardDnsQuery(dnsPayload)
@@ -378,38 +446,15 @@ class FocusCrewVpnService : VpnService() {
         return DOH_BOOTSTRAP_DOMAINS.contains(d) || DOH_BOOTSTRAP_DOMAINS.any { d.endsWith(".$it") }
     }
 
-    private fun isGoogleSearchDomain(domain: String): Boolean {
-        val d = domain.lowercase()
-        // Strictly only Google Web Search domains!
-        // NEVER intercept infrastructure, cloud, APIs, play, youtube, or push notifications!
-        if (d.contains("gstatic") || d.contains("googleapis") || d.contains("googleusercontent") ||
-            d.contains("android") || d.contains("clients") || d.contains("gvt1") ||
-            d.contains("1e100") || d.contains("ggpht") || d.contains("play") ||
-            d.contains("mail") || d.contains("drive") || d.contains("docs") ||
-            d.contains("cloud") || d.contains("firebase") || d.contains("crashlytics") ||
-            d.contains("telemetry") || d.contains("mtalk") || d.contains("auth") ||
-            d.contains("accounts") || d.contains("youtube") || d.contains("video")
-        ) {
-            return false
-        }
-        return d == "google.com" || d == "www.google.com" ||
-               (d.startsWith("www.google.") && d.length <= 16) ||
-               (d.startsWith("google.") && d.length <= 12)
-    }
-
-    private fun isBingSearchDomain(domain: String): Boolean {
-        val d = domain.lowercase()
-        return d == "bing.com" || d == "www.bing.com" || d.endsWith(".bing.com")
-    }
-
-    private fun isDuckDuckGoDomain(domain: String): Boolean {
-        val d = domain.lowercase()
-        return d == "duckduckgo.com" || d == "www.duckduckgo.com"
-    }
-
+    /**
+     * Whitelist of research, educational, and platform domains that must NEVER be intercepted or delayed.
+     * Guarantees 100% full-speed Google Search, Google Scholar, Wikipedia, YouTube, and CDN assets.
+     */
     private fun isWhitelistedDomain(domain: String): Boolean {
         val d = domain.lowercase().removePrefix("www.").trim()
-        return d == "youtube.com" || d.endsWith(".youtube.com") ||
+        return d == "google.com" || d.endsWith(".google.com") ||
+               d.contains("google.com.") || d.startsWith("google.") ||
+               d == "youtube.com" || d.endsWith(".youtube.com") ||
                d == "youtu.be" || d.endsWith(".youtu.be") ||
                d == "googlevideo.com" || d.endsWith(".googlevideo.com") ||
                d == "ytimg.com" || d.endsWith(".ytimg.com") ||
@@ -421,12 +466,15 @@ class FocusCrewVpnService : VpnService() {
                d == "googleusercontent.com" || d.endsWith(".googleusercontent.com") ||
                d == "play.google.com" || d == "accounts.google.com" ||
                d == "dns.google" || d == "dns.google.com" ||
-               d == "android.com" || d.endsWith(".android.com")
+               d == "android.com" || d.endsWith(".android.com") ||
+               d == "wikipedia.org" || d.endsWith(".wikipedia.org") ||
+               d == "github.com" || d.endsWith(".github.com") ||
+               d == "stackoverflow.com" || d.endsWith(".stackoverflow.com")
     }
 
     /**
      * Forwards a clean DNS query to upstream Tier-1 DNS resolvers (Cloudflare & Google).
-     * Fast 500ms timeout with automatic failover.
+     * Reliable 2000ms timeout with automatic failover to prevent mobile data packet drops.
      */
     private fun forwardDnsQuery(dnsPayload: ByteArray): ByteArray? {
         for (serverIp in UPSTREAM_DNS_SERVERS) {
@@ -434,7 +482,7 @@ class FocusCrewVpnService : VpnService() {
             try {
                 socket = DatagramSocket()
                 protect(socket)
-                socket.soTimeout = 500
+                socket.soTimeout = 2000 // 2.0s timeout ensures stable research on mobile networks
 
                 val target = InetAddress.getByName(serverIp)
                 val outPacket = DatagramPacket(dnsPayload, dnsPayload.size, target, DNS_PORT)
@@ -448,7 +496,7 @@ class FocusCrewVpnService : VpnService() {
                     return buffer.copyOfRange(0, inPacket.length)
                 }
             } catch (_: Exception) {
-                // Try next server on timeout or failure
+                // Try next server on timeout or failover
             } finally {
                 try { socket?.close() } catch (_: Exception) {}
             }

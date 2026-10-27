@@ -31,11 +31,11 @@ fun SecuritySettingsCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = DaylightPaper),
         border = BorderStroke(1.dp, WhisperBorder)
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -43,11 +43,11 @@ fun SecuritySettingsCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(32.dp)
                         .background(BritishRacingSage.copy(alpha = 0.12f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🛡️", fontSize = 18.sp)
+                    Text("🛡️", fontSize = 16.sp)
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))

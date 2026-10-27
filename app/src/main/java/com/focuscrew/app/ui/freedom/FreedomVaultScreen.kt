@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,7 +25,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -37,13 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.focuscrew.app.service.AntiPornDefenderManager
 import com.focuscrew.app.service.FreedomVaultManager
+import com.focuscrew.app.ui.security.SecuritySettingsCard
 import com.focuscrew.app.ui.theme.AntiqueHoneyBrass
 import com.focuscrew.app.ui.theme.BritishRacingSage
 import com.focuscrew.app.ui.theme.CashmereCream
@@ -60,14 +62,13 @@ fun FreedomVaultScreen(
     modifier: Modifier = Modifier
 ) {
     val state by FreedomVaultManager.state.collectAsState()
-    val blockedSearches by com.focuscrew.app.service.AntiPornDefenderManager.blockedSearchesCount.collectAsState()
+    val blockedSearches by AntiPornDefenderManager.blockedSearchesCount.collectAsState()
     val isCurfewActive = remember(state) {
         FreedomVaultManager.isCurrentTimeInDangerZone()
     }
 
     var showUrgeBreaker by remember(initialOpenUrgeBreaker) { mutableStateOf(initialOpenUrgeBreaker) }
     var showEditWhyDialog by remember { mutableStateOf(false) }
-    var showAntiImpulseDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -75,9 +76,9 @@ fun FreedomVaultScreen(
             .fillMaxSize()
             .background(CashmereCream)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
-        // Top Banner / Header
+        // Top Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -86,163 +87,156 @@ fun FreedomVaultScreen(
             Column {
                 Text(
                     text = "Freedom Vault",
-                    style = MaterialTheme.typography.headlineMedium,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = SoftEspressoInk
                 )
                 Text(
-                    text = "100% Private Dopamine Detox & Focus Hub",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Dopamine Detox & Privacy Hub",
+                    fontSize = 11.sp,
                     color = MutedCharcoalOlive
                 )
             }
 
+            // Clean pill badge with single-line no-wrap protection
             Box(
                 modifier = Modifier
-                    .background(BritishRacingSage.copy(alpha = 0.12f), CircleShape)
+                    .background(BritishRacingSage.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "🔒 PRIVATE",
-                    fontSize = 10.sp,
+                    text = "🔒 Private",
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = BritishRacingSage
+                    color = BritishRacingSage,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Component 1: DOPAMINE DETOX SHIELD (Unified Master Blocker)
+        // Component 1: DOPAMINE DETOX SHIELD (Compact Master Blocker)
         TitanAntiPornFortressCard()
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Hero Streak & Milestones Card
+        // Component 2: Hero Streak & Emergency SOS (Combined Compact Hero)
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = DaylightPaper),
             border = androidx.compose.foundation.BorderStroke(1.dp, WhisperBorder)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(14.dp)
             ) {
-                Text(
-                    text = "DOPAMINE DETOX STREAK",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AntiqueHoneyBrass,
-                    letterSpacing = 1.2.sp
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = "${state.cleanDaysStreak}",
-                        fontSize = 56.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = SoftEspressoInk
-                    )
-                    Text(
-                        text = if (state.cleanDaysStreak == 1) " day" else " days",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MutedCharcoalOlive,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                }
-
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "🏆 Best: ${state.bestStreakDays} days",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MutedCharcoalOlive
-                    )
-                    Text("•", color = WhisperBorder)
-                    Text(
-                        text = "⚡ ${state.urgesOvercomeCount} Urges Defeated",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BritishRacingSage
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Neuro-recovery milestone badge
-                val (milestoneTitle, milestoneDesc) = state.getRecoveryMilestone()
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(WarmLinen, RoundedCornerShape(14.dp))
-                        .border(1.dp, WhisperBorder, RoundedCornerShape(14.dp))
-                        .padding(14.dp)
-                ) {
+                    // Left Column: Streak metrics
                     Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🧠", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "DETOX STREAK",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AntiqueHoneyBrass,
+                            letterSpacing = 1.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Row(verticalAlignment = Alignment.Bottom) {
                             Text(
-                                text = milestoneTitle,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = "${state.cleanDaysStreak}",
+                                fontSize = 34.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = SoftEspressoInk
                             )
+                            Text(
+                                text = if (state.cleanDaysStreak == 1) " day" else " days",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MutedCharcoalOlive,
+                                modifier = Modifier.padding(bottom = 5.dp, start = 2.dp)
+                            )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = milestoneDesc,
-                            fontSize = 12.sp,
-                            color = MutedCharcoalOlive,
-                            lineHeight = 16.sp
-                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🏆 Best: ${state.bestStreakDays}d",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MutedCharcoalOlive
+                            )
+                            Text("•", fontSize = 10.sp, color = WhisperBorder)
+                            Text(
+                                text = "⚡ ${state.urgesOvercomeCount} Urges Defeated",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BritishRacingSage
+                            )
+                        }
                     }
+
+                    // Right Side: Compact Emergency SOS Button
+                    Button(
+                        onClick = { showUrgeBreaker = true },
+                        modifier = Modifier.height(42.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AntiqueHoneyBrass),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⚡", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Break Urge",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Compact Milestone 1-Line Indicator
+                val (milestoneTitle, _) = state.getRecoveryMilestone()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(WarmLinen, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🧠", fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Phase: $milestoneTitle",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SoftEspressoInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Big Glowing Emergency SOS Button
-        Button(
-            onClick = { showUrgeBreaker = true },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = AntiqueHoneyBrass
-            ),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text("⚡", fontSize = 18.sp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "BREAK THE URGE (SOS)",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    letterSpacing = 0.5.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Life Reclaimed Capital & Hours Saved
+        // Component 3: Life Reclaimed (Compact Glanceable 3-Stat Bar)
         LifeReclaimedCard(
             cleanDays = state.cleanDaysStreak,
             searchesIntercepted = blockedSearches,
@@ -251,84 +245,88 @@ fun FreedomVaultScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Neuroplasticity Dopamine Brain Rewiring Map
+        // Component 4: Neuroplasticity Timeline (Compact & Collapsible)
         NeuroplasticityMapCard(cleanDays = state.cleanDaysStreak)
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // "Why I Started" Anchor Card
+        // Component 5: "My Personal Anchor" (Compact Quote Card)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { showEditWhyDialog = true },
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = DaylightPaper),
             border = androidx.compose.foundation.BorderStroke(1.dp, WhisperBorder)
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("⚓", fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Text("⚓", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
                         Text(
                             text = "My Personal Anchor",
-                            fontSize = 14.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SoftEspressoInk
+                            color = MutedCharcoalOlive
+                        )
+                        Text(
+                            text = "\"${state.whyIStartedNote}\"",
+                            fontSize = 12.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = SoftEspressoInk,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Text(
-                        text = "Edit ✏️",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AntiqueHoneyBrass
-                    )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "\"${state.whyIStartedNote}\"",
-                    fontSize = 13.sp,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = SoftEspressoInk,
-                    lineHeight = 18.sp
+                    text = "Edit ✏️",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AntiqueHoneyBrass
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Component 2: Nighttime Danger Zone Curfew Scheduler
+        // Component 6: Night Danger Zone Scheduler
         DangerZoneSettingsCard(
             state = state,
             isCurfewActiveNow = isCurfewActive
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Component 3: Security & Anti-Tamper Passcode Protection
-        com.focuscrew.app.ui.security.SecuritySettingsCard()
+        // Component 7: Security & Anti-Tamper Passcode Protection
+        SecuritySettingsCard()
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Reset Streak Button (Compassionate)
+        // Reset Streak Button (Compact)
         TextButton(
             onClick = { showResetDialog = true },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = "Had a slip? Debrief and reset streak",
-                fontSize = 13.sp,
+                fontSize = 11.sp,
                 color = MutedCharcoalOlive
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
     }
 
     // Dialogs
@@ -355,11 +353,11 @@ fun FreedomVaultScreen(
             text = {
                 Column {
                     Text(
-                        text = "Write the raw truth of why you are quitting. This text will be shown to you during urgent cravings.",
+                        text = "Write your core reason for staying focused. This will appear during urge emergencies.",
                         fontSize = 12.sp,
                         color = MutedCharcoalOlive
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = tempWhyText,
                         onValueChange = { tempWhyText = it },
@@ -381,87 +379,12 @@ fun FreedomVaultScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BritishRacingSage)
                 ) {
-                    Text("Save Anchor", color = Color.White)
+                    Text("Save", color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showEditWhyDialog = false }) {
                     Text("Cancel", color = MutedCharcoalOlive)
-                }
-            },
-            containerColor = DaylightPaper
-        )
-    }
-
-    if (showAntiImpulseDialog) {
-        var selectedEmotion by remember { mutableStateOf("Boredom") }
-
-        AlertDialog(
-            onDismissRequest = { showAntiImpulseDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⏳", fontSize = 20.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "15-Minute Impulse Pause",
-                        fontWeight = FontWeight.Bold,
-                        color = SoftEspressoInk
-                    )
-                }
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "To protect you from impulsive decisions, shields cannot be disabled immediately. What feeling are you trying to escape right now?",
-                        fontSize = 13.sp,
-                        color = MutedCharcoalOlive,
-                        lineHeight = 18.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val emotions = listOf("Boredom", "Stress / Anxiety", "Loneliness", "Fatigue / Exhaustion", "Anger")
-                    emotions.forEach { emotion ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectedEmotion = emotion }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .background(
-                                        if (selectedEmotion == emotion) AntiqueHoneyBrass else WarmLinen,
-                                        CircleShape
-                                    )
-                                    .border(1.dp, WhisperBorder, CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = emotion,
-                                fontSize = 13.sp,
-                                fontWeight = if (selectedEmotion == emotion) FontWeight.Bold else FontWeight.Normal,
-                                color = SoftEspressoInk
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        FreedomVaultManager.startAntiImpulseCooldown()
-                        showAntiImpulseDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = TerracottaClay)
-                ) {
-                    Text("Start 15-Min Cooldown", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAntiImpulseDialog = false }) {
-                    Text("Keep Shields On", color = BritishRacingSage, fontWeight = FontWeight.Bold)
                 }
             },
             containerColor = DaylightPaper
@@ -479,14 +402,12 @@ fun FreedomVaultScreen(
                 )
             },
             text = {
-                Column {
-                    Text(
-                        text = "A slip is a moment, not your identity. Your previous clean days are never erased—they rewired your brain.\n\nTake 3 deep breaths, forgive yourself, learn what triggered the slip, and let's begin anew.",
-                        fontSize = 13.sp,
-                        color = MutedCharcoalOlive,
-                        lineHeight = 18.sp
-                    )
-                }
+                Text(
+                    text = "A slip is a moment, not your identity. Your previous clean days are never erased—they rewired your brain.\n\nTake 3 deep breaths, forgive yourself, learn what triggered the slip, and let's begin anew.",
+                    fontSize = 12.sp,
+                    color = MutedCharcoalOlive,
+                    lineHeight = 17.sp
+                )
             },
             confirmButton = {
                 Button(
@@ -496,7 +417,7 @@ fun FreedomVaultScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BritishRacingSage)
                 ) {
-                    Text("Reset Streak & Rebuild", color = Color.White)
+                    Text("Reset & Rebuild", color = Color.White)
                 }
             },
             dismissButton = {
