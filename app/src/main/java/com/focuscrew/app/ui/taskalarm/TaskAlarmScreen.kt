@@ -67,6 +67,15 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.AlarmManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
 import com.focuscrew.app.data.local.entity.TaskAlarmEntity
 import com.focuscrew.app.data.repository.TaskAlarmRepository
 import kotlinx.coroutines.launch
@@ -360,7 +369,10 @@ fun TaskAlarmScreen(
     if (showCreateSheet) {
         CreateEditTaskBottomSheet(
             taskToEdit = editingTask,
-            onDismiss = { showCreateSheet = false },
+            onDismiss = {
+                showCreateSheet = false
+                editingTask = null
+            },
             onSave = { newTask ->
                 scope.launch {
                     if (editingTask == null) {
@@ -368,7 +380,14 @@ fun TaskAlarmScreen(
                     } else {
                         repository.updateTask(newTask)
                     }
+                    val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+                    val timeStr = timeFormat.format(Date(newTask.scheduledTimeMillis))
+                    val calNow = Calendar.getInstance()
+                    val targetCal = Calendar.getInstance().apply { timeInMillis = newTask.scheduledTimeMillis }
+                    val dayStr = if (targetCal.get(Calendar.DAY_OF_YEAR) == calNow.get(Calendar.DAY_OF_YEAR)) "Today" else "Tomorrow"
+                    Toast.makeText(context, "✅ Alarm saved for $dayStr at $timeStr! Will ring on time.", Toast.LENGTH_LONG).show()
                     showCreateSheet = false
+                    editingTask = null
                 }
             }
         )
@@ -652,7 +671,10 @@ fun CreateEditTaskBottomSheet(
     onDismiss: () -> Unit,
     onSave: (TaskAlarmEntity) -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scrollState = rememberScrollState()
+
     val calendar = remember {
         Calendar.getInstance().apply {
             if (taskToEdit != null) {
@@ -676,6 +698,81 @@ fun CreateEditTaskBottomSheet(
     var isExactAlarm by remember { mutableStateOf(taskToEdit?.isExactAlarm ?: true) }
     var customWeekdays by remember { mutableStateOf(taskToEdit?.customWeekdays ?: "2,3,4,5,6") }
 
+    val alarmManager = remember { context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager }
+    val canScheduleExact = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() ?: true
+        } else {
+            true
+        }
+    }
+
+    // Dynamic calculations for countdown & time preview
+    val previewTargetCal = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, selectedHour)
+        set(Calendar.MINUTE, selectedMinute)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+
+        if (timeInMillis <= System.currentTimeMillis()) {
+            add(Calendar.DAY_OF_YEAR, 1)
+        }
+    }
+    val diffMillis = previewTargetCal.timeInMillis - System.currentTimeMillis()
+    val diffMinutes = (diffMillis / (1000 * 60)).coerceAtLeast(1)
+    val diffHours = diffMinutes / 60
+    val remMinutes = diffMinutes % 60
+    val countdownText = if (diffHours > 0) {
+        "rings in ${diffHours}h ${remMinutes}m"
+    } else {
+        "rings in ${remMinutes}m"
+    }
+    val isTodayAlarm = previewTargetCal.get(Calendar.DAY_OF_YEAR) == Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+    val dayPrefix = if (isTodayAlarm) "Today" else "Tomorrow"
+    val formattedPreviewTime = SimpleDateFormat("h:mm a", Locale.getDefault()).format(previewTargetCal.time)
+
+    val performSave: () -> Unit = {
+        val targetCal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, selectedHour)
+            set(Calendar.MINUTE, selectedMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
+        }
+
+        val effectiveTitle = if (title.isBlank()) {
+            "Alarm at $formattedPreviewTime"
+        } else {
+            title.trim()
+        }
+
+        val entity = taskToEdit?.copy(
+            title = effectiveTitle,
+            description = description.trim(),
+            scheduledTimeMillis = targetCal.timeInMillis,
+            recurrence = recurrence,
+            customWeekdays = customWeekdays,
+            category = category,
+            priority = priority,
+            isExactAlarm = isExactAlarm,
+            updatedAtMillis = System.currentTimeMillis()
+        ) ?: TaskAlarmEntity(
+            title = effectiveTitle,
+            description = description.trim(),
+            scheduledTimeMillis = targetCal.timeInMillis,
+            recurrence = recurrence,
+            customWeekdays = customWeekdays,
+            category = category,
+            priority = priority,
+            isExactAlarm = isExactAlarm
+        )
+
+        onSave(entity)
+    }
+
     val quickPresets = listOf(
         "Coding" to (22 to 0),     // 10:00 PM
         "Review Notes" to (20 to 0), // 8:00 PM
@@ -692,27 +789,86 @@ fun CreateEditTaskBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .imePadding()
                 .padding(horizontal = 24.dp, vertical = 8.dp)
-                .padding(bottom = 36.dp),
+                .padding(bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Header Row: Title & TOP SAVE BUTTON (Immediately visible when popup opens!)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (taskToEdit == null) "Schedule Task Alarm" else "Edit Task Alarm",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "🔔 Exact Alarm",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (taskToEdit == null) "Schedule Task Alarm" else "Edit Task Alarm",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "🔔 Exact-Time Ring Guarantee",
+                        fontSize = 12.sp,
+                        color = Color(0xFF16A34A),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                // 💾 1. TOP SAVE BUTTON - IMMEDIATELY VISIBLE ON POPUP OPEN
+                Button(
+                    onClick = performSave,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    modifier = Modifier.height(38.dp)
+                ) {
+                    Text("💾 Save", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                }
+            }
+
+            // Warning if exact alarm permission not granted on Android 12+
+            if (!canScheduleExact) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                try {
+                                    val intent = Intent(
+                                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("⚠️", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Exact Alarm Permission Needed",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF92400E)
+                            )
+                            Text(
+                                text = "Tap here to allow alarms to ring precisely on time even during device sleep.",
+                                fontSize = 11.sp,
+                                color = Color(0xFFB45309)
+                            )
+                        }
+                    }
+                }
             }
 
             // Quick suggestion presets chips
@@ -747,8 +903,8 @@ fun CreateEditTaskBottomSheet(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("Task Title *") },
-                placeholder = { Text("e.g. Coding") },
+                label = { Text("Task Title") },
+                placeholder = { Text("e.g. Coding (or leave blank for Alarm at $formattedPreviewTime)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp)
@@ -765,7 +921,7 @@ fun CreateEditTaskBottomSheet(
                 shape = RoundedCornerShape(14.dp)
             )
 
-            // Time Selector (Hour & Minute incrementers)
+            // Time Selector (Hour & Minute incrementers) + DEDICATED SAVE BUTTON INSIDE TIME CARD
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
@@ -807,23 +963,56 @@ fun CreateEditTaskBottomSheet(
                             Text("Minute", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
 
-                        // Formatted 12-hour preview
-                        val previewCal = Calendar.getInstance().apply {
-                            set(Calendar.HOUR_OF_DAY, selectedHour)
-                            set(Calendar.MINUTE, selectedMinute)
-                        }
+                        // Formatted 12-hour preview badge
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
-                                text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(previewCal.time),
+                                text = formattedPreviewTime,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Ring Status Banner
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "⏰ Will ring $dayPrefix at $formattedPreviewTime ($countdownText)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 💾 2. DEDICATED SAVE BUTTON RIGHT INSIDE THE ALARM TIME PICKER CARD
+                    Button(
+                        onClick = performSave,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                    ) {
+                        Text(
+                            text = "💾 Save Alarm for $formattedPreviewTime",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Color.White
+                        )
                     }
                 }
             }
@@ -877,55 +1066,20 @@ fun CreateEditTaskBottomSheet(
                 )
             }
 
-            // Save Button
+            // 💾 3. CONFIRM & SAVE ALARM BUTTON (Bottom Primary Action, Always Enabled)
             Button(
-                onClick = {
-                    if (title.isBlank()) return@Button
-
-                    val targetCal = Calendar.getInstance().apply {
-                        set(Calendar.HOUR_OF_DAY, selectedHour)
-                        set(Calendar.MINUTE, selectedMinute)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-
-                        if (timeInMillis <= System.currentTimeMillis()) {
-                            add(Calendar.DAY_OF_YEAR, 1)
-                        }
-                    }
-
-                    val entity = taskToEdit?.copy(
-                        title = title.trim(),
-                        description = description.trim(),
-                        scheduledTimeMillis = targetCal.timeInMillis,
-                        recurrence = recurrence,
-                        customWeekdays = customWeekdays,
-                        category = category,
-                        priority = priority,
-                        isExactAlarm = isExactAlarm,
-                        updatedAtMillis = System.currentTimeMillis()
-                    ) ?: TaskAlarmEntity(
-                        title = title.trim(),
-                        description = description.trim(),
-                        scheduledTimeMillis = targetCal.timeInMillis,
-                        recurrence = recurrence,
-                        customWeekdays = customWeekdays,
-                        category = category,
-                        priority = priority,
-                        isExactAlarm = isExactAlarm
-                    )
-
-                    onSave(entity)
-                },
+                onClick = performSave,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(16.dp),
-                enabled = title.isNotBlank()
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text(
-                    text = if (taskToEdit == null) "Set Task Alarm" else "Save Changes",
+                    text = if (taskToEdit == null) "💾 Confirm & Save Alarm ($formattedPreviewTime)" else "💾 Save Changes ($formattedPreviewTime)",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    fontSize = 16.sp,
+                    color = Color.White
                 )
             }
         }
