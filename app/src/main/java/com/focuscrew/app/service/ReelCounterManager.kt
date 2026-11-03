@@ -245,6 +245,34 @@ object ReelCounterManager {
         WeeklyReelScheduleManager.recordTimeForToday(durationMs)
     }
 
+    /**
+     * Synchronizes authoritative OS screen time (e.g. from UsageStatsManager).
+     * Takes the highest verified value between OS UsageStats and real-time accessibility tracking,
+     * ensuring zero fake time and zero estimates.
+     */
+    @Synchronized
+    fun syncAuthoritativeTimes(instagramTimeMs: Long, youtubeTimeMs: Long) {
+        val prefs = sharedPreferences ?: return
+        checkAndApplyDateRollover(prefs)
+
+        val current = _stats.value
+        val updatedIgTime = maxOf(current.todayInstagramTimeMs, instagramTimeMs)
+        val updatedYtTime = maxOf(current.todayYoutubeTimeMs, youtubeTimeMs)
+
+        if (updatedIgTime != current.todayInstagramTimeMs || updatedYtTime != current.todayYoutubeTimeMs) {
+            val updated = current.copy(
+                todayInstagramTimeMs = updatedIgTime,
+                todayYoutubeTimeMs = updatedYtTime
+            )
+            _stats.value = updated
+            prefs.edit().apply {
+                putLong(KEY_TODAY_IG_TIME, updatedIgTime)
+                putLong(KEY_TODAY_YT_TIME, updatedYtTime)
+                apply()
+            }
+        }
+    }
+
     fun setOverlayEnabled(enabled: Boolean) {
         _stats.value = _stats.value.copy(isOverlayEnabled = enabled)
         sharedPreferences?.edit()?.putBoolean(KEY_OVERLAY_ENABLED, enabled)?.apply()

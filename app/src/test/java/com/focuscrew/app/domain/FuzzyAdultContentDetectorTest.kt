@@ -54,7 +54,18 @@ class FuzzyAdultContentDetectorTest {
             "nude",
             "safe=off",
             "safesearch off",
-            "google.com/safesearch"
+            "safesearch: off",
+            "turn off safesearch",
+            "turn safe search off",
+            "disable safesearch",
+            "disable safe search",
+            "how to turn off safesearch",
+            "safesearch is off",
+            "google.com/safesearch",
+            "bing.com/account/general",
+            "duckduckgo.com/settings",
+            "adlt=off",
+            "kp=-2"
         )
         for (q in blockedExplicitQueries) {
             val r = FuzzyAdultContentDetector.detect(q)
@@ -147,7 +158,15 @@ class FuzzyAdultContentDetectorTest {
             "Top rated movies on Netflix",
             "Live streaming camera setup",
             "Stripes pattern design wallpaper",
-            "How to cook pork chops"
+            "How to cook pork chops",
+            "Squirrel facts in biology",
+            "Razer gaming mouse setup",
+            "Sore throat remedies",
+            "This is only for you",
+            "WhatsApp messenger chat",
+            "Free Fire battlegrounds gameplay",
+            "PUBG mobile update",
+            "YouTube tutorial for Android"
         )
 
         for (query in innocentQueries) {

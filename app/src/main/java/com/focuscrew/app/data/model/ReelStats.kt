@@ -93,16 +93,16 @@ data class ReelStats(
 
     companion object {
         fun formatDuration(timeMs: Long): String {
-            if (timeMs <= 0L) return "0m"
+            if (timeMs <= 0L) return "0s"
             val totalSeconds = timeMs / 1000
             val totalMinutes = totalSeconds / 60
             val hours = totalMinutes / 60
             val minutes = totalMinutes % 60
+            val seconds = totalSeconds % 60
             return when {
-                hours > 0 -> "${hours}h ${minutes}m"
-                minutes > 0 -> "${minutes}m"
-                totalSeconds > 0 -> "${totalSeconds}s"
-                else -> "0m"
+                hours > 0 -> if (minutes > 0) "${hours}h ${minutes}m" else "${hours}h"
+                minutes > 0 -> if (seconds > 0) "${minutes}m ${seconds}s" else "${minutes}m"
+                else -> "${seconds}s"
             }
         }
     }

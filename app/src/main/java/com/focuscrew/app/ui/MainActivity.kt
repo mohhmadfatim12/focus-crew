@@ -242,6 +242,7 @@ private fun MainContent(
         AntiPornDefenderManager.setDefenderEnabled(true)
         AntiPornDefenderManager.setSafeSearchEnforced(true)
         FocusCrewVpnService.initialize(context)
+        FocusCrewVpnService.autoStartIfPermitted(context)
         TrialSubscriptionManager.initialize(context)
         AppSecurityManager.initialize(context)
         ReelNotificationManager.createNotificationChannel(context)

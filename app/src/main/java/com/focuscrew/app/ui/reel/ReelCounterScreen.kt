@@ -4,6 +4,7 @@ import android.content.Intent
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -69,6 +70,10 @@ fun ReelCounterScreen(
     val isServiceConnected by BlockerManager.isServiceConnected.collectAsState()
     var showResetDialog by remember { mutableStateOf(false) }
 
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.focuscrew.app.util.UsageStatsHelper.syncExactTimesIfPermitted(context)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -101,36 +106,52 @@ fun ReelCounterScreen(
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("⚠️", fontSize = 24.sp)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Tracking Inactive",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "Enable FocusCrew Accessibility Service to count reels automatically.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
-                        )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("⚠️", fontSize = 24.sp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Tracking Inactive",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "Enable FocusCrew Accessibility Service to count reels automatically.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            })
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Enable", fontSize = 12.sp)
+                        Button(
+                            onClick = {
+                                com.focuscrew.app.util.RestrictedSettingsHelper.openAccessibilitySettings(context)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Enable Blocker", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            OutlinedButton(
+                                onClick = {
+                                    com.focuscrew.app.util.RestrictedSettingsHelper.openAppInfoForRestrictedSettings(context)
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Unlock (Android 13+)", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                 }
             }
@@ -485,6 +506,7 @@ private fun HeroTodayCard(stats: ReelStats) {
 
 @Composable
 private fun PlatformBreakdownCard(stats: ReelStats) {
+    val context = LocalContext.current
     Card(
         colors = CardDefaults.cardColors(
             containerColor = DaylightPaper
@@ -496,12 +518,37 @@ private fun PlatformBreakdownCard(stats: ReelStats) {
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            Text(
-                text = "Platform Breakdown",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = SoftEspressoInk
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Platform Breakdown",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = SoftEspressoInk
+                )
+
+                val hasUsageAccess = com.focuscrew.app.util.UsageStatsHelper.hasUsageAccessPermission(context)
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (hasUsageAccess) SagePillBg else WarmLinen,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                        if (!hasUsageAccess) {
+                            com.focuscrew.app.util.UsageStatsHelper.openUsageAccessSettings(context)
+                        }
+                    }
+                ) {
+                    Text(
+                        text = if (hasUsageAccess) "🟢 100% Exact System Time" else "⚡ Tap for 100% Exact Time",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (hasUsageAccess) BritishRacingSage else TerracottaClay,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(14.dp))
 
             // Instagram Row

@@ -12,8 +12,8 @@ data class FreedomVaultState(
     val urgesOvercomeCount: Int = 0,
     val whyIStartedNote: String = "I am reclaiming my focus, energy, and self-respect. My mind is my sanctuary.",
     
-    // Danger Zone Curfew (Bedtime Protection)
-    val dangerZoneEnabled: Boolean = true,
+    // Danger Zone Curfew (Bedtime Protection - Opt-in)
+    val dangerZoneEnabled: Boolean = false,
     val dangerZoneStartHour: Int = 23,   // 11:00 PM
     val dangerZoneStartMinute: Int = 0,
     val dangerZoneEndHour: Int = 6,      // 06:00 AM
@@ -31,15 +31,11 @@ data class FreedomVaultState(
     companion object {
         val defaultTriggerPackages: Set<String> = setOf(
             "com.android.chrome",
-            "com.google.android.youtube",
-            "com.instagram.android",
             "org.mozilla.firefox",
             "com.opera.browser",
             "com.brave.browser",
             "com.sec.android.app.sbrowser", // Samsung Internet
-            "com.microsoft.emmx",           // Microsoft Edge
-            "com.reddit.frontpage",
-            "com.twitter.android"
+            "com.microsoft.emmx"            // Microsoft Edge
         )
     }
 

@@ -47,9 +47,11 @@ class FocusCrewVpnService : VpnService() {
         private const val KEY_VPN_ENABLED = "vpn_dns_filter_enabled"
         private const val KEY_DOMAINS_BLOCKED_COUNT = "domains_blocked_count"
 
-        // Virtual local DNS tunnel endpoint
+        // Virtual local DNS tunnel endpoint (IPv4 + IPv6 for 5G/carrier leak protection)
         private const val VPN_LOCAL_IP = "10.245.0.1"
         private const val DNS_VIRTUAL_SERVER = "10.245.0.2"
+        private const val VPN_LOCAL_IPV6 = "fd00:fc::1"
+        private const val DNS_VIRTUAL_SERVER_IPV6 = "fd00:fc::2"
         private const val DNS_PORT = 53
         private const val MAX_PACKET_SIZE = 4096
 
@@ -80,8 +82,21 @@ class FocusCrewVpnService : VpnService() {
         fun initialize(context: Context) {
             if (prefs == null) {
                 prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                _isVpnEnabled.value = prefs?.getBoolean(KEY_VPN_ENABLED, false) ?: false
+                _isVpnEnabled.value = prefs?.getBoolean(KEY_VPN_ENABLED, true) ?: true
                 _domainsBlockedCount.value = prefs?.getInt(KEY_DOMAINS_BLOCKED_COUNT, 0) ?: 0
+            }
+        }
+
+        fun autoStartIfPermitted(context: Context) {
+            try {
+                if (VpnService.prepare(context) == null && !_isVpnRunning.value) {
+                    setVpnEnabled(true)
+                    val intent = Intent(context, FocusCrewVpnService::class.java)
+                    context.startService(intent)
+                    Log.d(TAG, "FocusCrewVpnService auto-started successfully")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "autoStartIfPermitted error: ${e.message}")
             }
         }
 
@@ -122,6 +137,30 @@ class FocusCrewVpnService : VpnService() {
             builder.addAddress(VPN_LOCAL_IP, 32)
             builder.addDnsServer(DNS_VIRTUAL_SERVER)
             builder.addRoute(DNS_VIRTUAL_SERVER, 32)
+
+            // Intercept standard public DNS servers so direct browser queries to 8.8.8.8 / 1.1.1.1
+            // are filtered and SafeSearch cannot be bypassed
+            try { builder.addRoute("8.8.8.8", 32) } catch (_: Exception) {}
+            try { builder.addRoute("8.8.4.4", 32) } catch (_: Exception) {}
+            try { builder.addRoute("1.1.1.1", 32) } catch (_: Exception) {}
+            try { builder.addRoute("1.0.0.1", 32) } catch (_: Exception) {}
+            try { builder.addRoute("9.9.9.9", 32) } catch (_: Exception) {}
+            try { builder.addRoute("208.67.222.222", 32) } catch (_: Exception) {}
+            try { builder.addRoute("208.67.220.220", 32) } catch (_: Exception) {}
+
+            // IPv6 DNS endpoint & routes so 5G carrier IPv6 DNS queries never leak or bypass the VPN!
+            try {
+                builder.addAddress(VPN_LOCAL_IPV6, 128)
+                builder.addDnsServer(DNS_VIRTUAL_SERVER_IPV6)
+                builder.addRoute(DNS_VIRTUAL_SERVER_IPV6, 128)
+                builder.addRoute("2001:4860:4860::8888", 128)
+                builder.addRoute("2001:4860:4860::8844", 128)
+                builder.addRoute("2606:4700:4700::1111", 128)
+                builder.addRoute("2606:4700:4700::1001", 128)
+            } catch (e: Exception) {
+                Log.w(TAG, "IPv6 route setup: ${e.message}")
+            }
+
             builder.setBlocking(true)
 
             // STRICT PER-APP SPLIT TUNNEL:
@@ -142,11 +181,10 @@ class FocusCrewVpnService : VpnService() {
                 }
             }
 
-            // Fallback: If no browser package was allowed, exclude our own app
+            // If no browser package was allowed, do NOT route device traffic! Abort VPN to protect internet.
             if (allowedCount == 0) {
-                try {
-                    builder.addDisallowedApplication(packageName)
-                } catch (_: Exception) {}
+                Log.w(TAG, "No allowed browser installed or active. Aborting VPN to safeguard device internet connectivity.")
+                return
             }
 
             vpnInterface = builder.establish()
@@ -266,6 +304,7 @@ class FocusCrewVpnService : VpnService() {
      * that must NEVER be routed through the VPN.
      */
     private fun isExcludedNonBrowser(pkg: String): Boolean {
+        if (AntiPornDefenderManager.isNonBrowserApp(pkg)) return true
         val lower = pkg.lowercase()
         return lower.contains("whatsapp") ||
                lower.contains("freefire") ||
@@ -280,7 +319,14 @@ class FocusCrewVpnService : VpnService() {
                lower.contains("discord") ||
                lower.contains("twitter") ||
                lower.contains("youtube") ||
-               lower.contains("tiktok")
+               lower.contains("googlevideo") ||
+               lower.contains("ytimg") ||
+               lower.contains("netflix") ||
+               lower.contains("spotify") ||
+               lower.contains("tiktok") ||
+               lower.contains("google.android.gms") ||
+               lower.contains("google.android.gsf") ||
+               lower.contains("android.vending")
     }
 
     /**
@@ -306,24 +352,35 @@ class FocusCrewVpnService : VpnService() {
 
                 if (length < 28) continue // Minimum 20 byte IP + 8 byte UDP header
 
-                // IPv4 only
                 val version = (packet.get(0).toInt() shr 4) and 0x0F
-                if (version != 4) continue
+                if (version != 4 && version != 6) continue
 
-                // UDP only (protocol 17)
-                val protocol = packet.get(9).toInt() and 0xFF
-                if (protocol != 17) continue
+                val ipHeaderLength: Int
+                val protocol: Int
+                val destPort: Int
+                val udpDataOffset: Int
 
-                val ipHeaderLength = (packet.get(0).toInt() and 0x0F) * 4
-                if (length < ipHeaderLength + 8) continue
-
-                val destPort = ((packet.get(ipHeaderLength + 2).toInt() and 0xFF) shl 8) or
-                        (packet.get(ipHeaderLength + 3).toInt() and 0xFF)
+                if (version == 4) {
+                    ipHeaderLength = (packet.get(0).toInt() and 0x0F) * 4
+                    if (length < ipHeaderLength + 8) continue
+                    protocol = packet.get(9).toInt() and 0xFF
+                    if (protocol != 17) continue
+                    destPort = ((packet.get(ipHeaderLength + 2).toInt() and 0xFF) shl 8) or
+                            (packet.get(ipHeaderLength + 3).toInt() and 0xFF)
+                    udpDataOffset = ipHeaderLength + 8
+                } else {
+                    // IPv6 fixed header 40 bytes
+                    ipHeaderLength = 40
+                    if (length < 48) continue
+                    protocol = packet.get(6).toInt() and 0xFF
+                    if (protocol != 17) continue
+                    destPort = ((packet.get(42).toInt() and 0xFF) shl 8) or
+                            (packet.get(43).toInt() and 0xFF)
+                    udpDataOffset = 48
+                }
 
                 // Must be DNS port 53
                 if (destPort != DNS_PORT) continue
-
-                val udpDataOffset = ipHeaderLength + 8
                 if (length <= udpDataOffset) continue
 
                 val dnsPayload = packet.array().copyOfRange(udpDataOffset, length)
@@ -332,16 +389,53 @@ class FocusCrewVpnService : VpnService() {
                 val domain = dnsQuery.domain.lowercase()
                 val rawIpPacket = packet.array().copyOf(length)
 
-                // ── 0. WHITELIST CHECK: Guaranteed 100% Fast Path for Google & Research ──
-                // Whitelist Google Search and CDN domains so normal research is NEVER delayed or broken!
+                // ── 0. SAFESEARCH VIP: Server-Lock Google, Bing & DuckDuckGo SafeSearch at DNS Layer ──
+                if (AntiPornDefenderManager.isSafeSearchEnforced.value) {
+                    val safeSearchPayload = when {
+                        isGoogleSearchDomain(domain) -> {
+                            Log.d(TAG, "🔒 Server-locking Google SafeSearch VIP (216.239.38.120) for $domain")
+                            DnsPacketParser.buildGoogleSafeSearchResponse(dnsQuery)
+                        }
+                        isBingSearchDomain(domain) -> {
+                            Log.d(TAG, "🔒 Server-locking Bing SafeSearch VIP (204.79.197.220) for $domain")
+                            DnsPacketParser.buildBingSafeSearchResponse(dnsQuery)
+                        }
+                        isDuckDuckGoSearchDomain(domain) -> {
+                            Log.d(TAG, "🔒 Server-locking DuckDuckGo SafeSearch VIP (52.142.124.215) for $domain")
+                            DnsPacketParser.buildDuckDuckGoSafeSearchResponse(dnsQuery)
+                        }
+                        else -> null
+                    }
+
+                    if (safeSearchPayload != null) {
+                        val responsePacket = if (version == 4) {
+                            buildResponseIpPacket(rawIpPacket, ipHeaderLength, safeSearchPayload)
+                        } else {
+                            buildResponseIpV6Packet(rawIpPacket, safeSearchPayload)
+                        }
+                        if (responsePacket != null) {
+                            synchronized(outputLock) {
+                                vpnOutput.write(responsePacket)
+                            }
+                        }
+                        continue
+                    }
+                }
+
+                // ── 1. WHITELIST CHECK: Guaranteed 100% Fast Path for CDNs & Educational Assets ──
+                // Whitelist non-search educational and platform domains so research is NEVER delayed!
                 val isWhitelisted = isWhitelistedDomain(domain)
 
                 if (!isWhitelisted) {
-                    // ── 1. BLOCK DOH (DNS over HTTPS) BOOTSTRAP TO ENFORCE BROWSER DNS ──
-                    if (isDohBootstrapDomain(domain)) {
-                        Log.d(TAG, "🔒 Blackholing DoH domain to enforce local DNS: $domain")
-                        val dnsResponse = DnsPacketParser.buildBlockedResponse(dnsQuery)
-                        val responsePacket = buildResponseIpPacket(rawIpPacket, ipHeaderLength, dnsResponse)
+                    // ── 2. CHROMIUM CANARY CHECK: Gracefully disable automatic DoH ──
+                    if (domain == "use-application-dns.net") {
+                        Log.d(TAG, "🔒 Returning NXDOMAIN for DoH canary to enforce local DNS: $domain")
+                        val dnsResponse = DnsPacketParser.buildNxdomainResponse(dnsQuery)
+                        val responsePacket = if (version == 4) {
+                            buildResponseIpPacket(rawIpPacket, ipHeaderLength, dnsResponse)
+                        } else {
+                            buildResponseIpV6Packet(rawIpPacket, dnsResponse)
+                        }
                         if (responsePacket != null) {
                             synchronized(outputLock) {
                                 vpnOutput.write(responsePacket)
@@ -356,7 +450,11 @@ class FocusCrewVpnService : VpnService() {
                         recordDomainBlocked()
 
                         val dnsResponse = DnsPacketParser.buildBlockedResponse(dnsQuery)
-                        val responsePacket = buildResponseIpPacket(rawIpPacket, ipHeaderLength, dnsResponse)
+                        val responsePacket = if (version == 4) {
+                            buildResponseIpPacket(rawIpPacket, ipHeaderLength, dnsResponse)
+                        } else {
+                            buildResponseIpV6Packet(rawIpPacket, dnsResponse)
+                        }
                         if (responsePacket != null) {
                             synchronized(outputLock) {
                                 vpnOutput.write(responsePacket)
@@ -372,7 +470,11 @@ class FocusCrewVpnService : VpnService() {
                 val now = System.currentTimeMillis()
                 if (cached != null && (now - cached.second) < DNS_CACHE_TTL_MS) {
                     val rewritten = rewriteTransactionId(cached.first, dnsQuery.transactionId)
-                    val responsePacket = buildResponseIpPacket(rawIpPacket, ipHeaderLength, rewritten)
+                    val responsePacket = if (version == 4) {
+                        buildResponseIpPacket(rawIpPacket, ipHeaderLength, rewritten)
+                    } else {
+                        buildResponseIpV6Packet(rawIpPacket, rewritten)
+                    }
                     if (responsePacket != null) {
                         synchronized(outputLock) {
                             vpnOutput.write(responsePacket)
@@ -387,7 +489,11 @@ class FocusCrewVpnService : VpnService() {
                         val responsePayload = forwardDnsQuery(dnsPayload)
                         if (responsePayload != null && isRunning) {
                             dnsCache[cacheKey] = Pair(responsePayload, System.currentTimeMillis())
-                            val responsePacket = buildResponseIpPacket(rawIpPacket, ipHeaderLength, responsePayload)
+                            val responsePacket = if (version == 4) {
+                                buildResponseIpPacket(rawIpPacket, ipHeaderLength, responsePayload)
+                            } else {
+                                buildResponseIpV6Packet(rawIpPacket, responsePayload)
+                            }
                             if (responsePacket != null) {
                                 synchronized(outputLock) {
                                     vpnOutput.write(responsePacket)
@@ -422,6 +528,8 @@ class FocusCrewVpnService : VpnService() {
     }
 
     private val DOH_BOOTSTRAP_DOMAINS = setOf(
+        "dns.google",
+        "dns.google.com",
         "chrome.cloudflare-dns.com",
         "cloudflare-dns.com",
         "security.cloudflare-dns.com",
@@ -442,8 +550,49 @@ class FocusCrewVpnService : VpnService() {
     )
 
     private fun isDohBootstrapDomain(domain: String): Boolean {
-        val d = domain.lowercase()
+        val d = domain.lowercase().trim().trimEnd('.')
         return DOH_BOOTSTRAP_DOMAINS.contains(d) || DOH_BOOTSTRAP_DOMAINS.any { d.endsWith(".$it") }
+    }
+
+    private fun isGoogleSearchDomain(domain: String): Boolean {
+        val d = domain.lowercase().trim().trimEnd('.')
+        if (d == "forcesafesearch.google.com") return true
+
+        // Clean out standard subdomains: www., images., m., search., encrypted., ipv4.
+        var host = d
+        while (host.startsWith("www.") || host.startsWith("images.") ||
+               host.startsWith("m.") || host.startsWith("search.") ||
+               host.startsWith("encrypted.") || host.startsWith("ipv4.")) {
+            when {
+                host.startsWith("www.") -> host = host.removePrefix("www.")
+                host.startsWith("images.") -> host = host.removePrefix("images.")
+                host.startsWith("m.") -> host = host.removePrefix("m.")
+                host.startsWith("search.") -> host = host.removePrefix("search.")
+                host.startsWith("encrypted.") -> host = host.removePrefix("encrypted.")
+                host.startsWith("ipv4.") -> host = host.removePrefix("ipv4.")
+            }
+        }
+
+        if (host == "google.com") return true
+
+        // Match all country-specific Google domains: google.com.pk, google.co.in, google.co.uk, google.de, etc.
+        if (host.startsWith("google.")) {
+            val suffix = host.removePrefix("google.")
+            if (suffix.length in 2..10 && !suffix.contains("/") && !suffix.contains("api") && !suffix.contains("goog")) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun isBingSearchDomain(domain: String): Boolean {
+        val d = domain.lowercase().trim().trimEnd('.').removePrefix("www.")
+        return d == "bing.com" || d.endsWith(".bing.com")
+    }
+
+    private fun isDuckDuckGoSearchDomain(domain: String): Boolean {
+        val d = domain.lowercase().trim().trimEnd('.').removePrefix("www.")
+        return d == "duckduckgo.com" || d.endsWith(".duckduckgo.com")
     }
 
     /**
@@ -451,7 +600,7 @@ class FocusCrewVpnService : VpnService() {
      * Guarantees 100% full-speed Google Search, Google Scholar, Wikipedia, YouTube, and CDN assets.
      */
     private fun isWhitelistedDomain(domain: String): Boolean {
-        val d = domain.lowercase().removePrefix("www.").trim()
+        val d = domain.lowercase().trim().trimEnd('.').removePrefix("www.")
         return d == "google.com" || d.endsWith(".google.com") ||
                d.contains("google.com.") || d.startsWith("google.") ||
                d == "youtube.com" || d.endsWith(".youtube.com") ||
@@ -465,7 +614,6 @@ class FocusCrewVpnService : VpnService() {
                d == "1e100.net" || d.endsWith(".1e100.net") ||
                d == "googleusercontent.com" || d.endsWith(".googleusercontent.com") ||
                d == "play.google.com" || d == "accounts.google.com" ||
-               d == "dns.google" || d == "dns.google.com" ||
                d == "android.com" || d.endsWith(".android.com") ||
                d == "wikipedia.org" || d.endsWith(".wikipedia.org") ||
                d == "github.com" || d.endsWith(".github.com") ||
@@ -582,6 +730,118 @@ class FocusCrewVpnService : VpnService() {
         }
 
         return (sum.inv() and 0xFFFF).toInt()
+    }
+
+    /**
+     * Builds response IPv6 + UDP packet, swapping source and destination IPv6 addresses/ports
+     * and computing the RFC 2460 UDP IPv6 checksum over pseudo-header + UDP data.
+     */
+    private fun buildResponseIpV6Packet(
+        originalPacket: ByteArray,
+        dnsResponse: ByteArray
+    ): ByteArray? {
+        try {
+            val udpLength = 8 + dnsResponse.size
+            val totalLength = 40 + udpLength
+            val response = ByteArray(totalLength)
+
+            // IPv6 Header (40 bytes)
+            // Version 6 (0x60), Traffic Class (0x00), Flow Label (0x00000)
+            response[0] = 0x60
+            response[1] = 0x00
+            response[2] = 0x00
+            response[3] = 0x00
+
+            // Payload Length (udpLength)
+            response[4] = ((udpLength shr 8) and 0xFF).toByte()
+            response[5] = (udpLength and 0xFF).toByte()
+
+            // Next Header = 17 (UDP)
+            response[6] = 17
+
+            // Hop Limit = 64
+            response[7] = 64
+
+            // Swap Source IPv6 (8..23) and Dest IPv6 (24..39)
+            // New Source = old Dest
+            System.arraycopy(originalPacket, 24, response, 8, 16)
+            // New Dest = old Source
+            System.arraycopy(originalPacket, 8, response, 24, 16)
+
+            // UDP Header (offset 40..47)
+            // Swap ports: old dest (42..43) -> new source (40..41)
+            response[40] = originalPacket[42]
+            response[41] = originalPacket[43]
+            // old source (40..41) -> new dest (42..43)
+            response[42] = originalPacket[40]
+            response[43] = originalPacket[41]
+
+            // UDP Length
+            response[44] = ((udpLength shr 8) and 0xFF).toByte()
+            response[45] = (udpLength and 0xFF).toByte()
+
+            // Checksum placeholder = 0
+            response[46] = 0
+            response[47] = 0
+
+            // Copy DNS Payload
+            System.arraycopy(dnsResponse, 0, response, 48, dnsResponse.size)
+
+            // Compute Checksum over IPv6 Pseudo-header + UDP Header + Payload
+            val srcIp = response.copyOfRange(8, 24)
+            val dstIp = response.copyOfRange(24, 40)
+            val udpPacket = response.copyOfRange(40, totalLength)
+            val checksum = computeUdpIpv6Checksum(srcIp, dstIp, udpPacket, udpLength)
+
+            response[46] = ((checksum shr 8) and 0xFF).toByte()
+            response[47] = (checksum and 0xFF).toByte()
+
+            return response
+        } catch (e: Exception) {
+            Log.w(TAG, "Error building response IPv6 packet: ${e.message}")
+            return null
+        }
+    }
+
+    private fun computeUdpIpv6Checksum(
+        srcIp: ByteArray,
+        dstIp: ByteArray,
+        udpPacket: ByteArray,
+        udpLength: Int
+    ): Int {
+        var sum = 0L
+
+        // Pseudo-header: Source IPv6 (16 bytes = 8 shorts)
+        for (i in 0 until 16 step 2) {
+            sum += ((srcIp[i].toInt() and 0xFF) shl 8) or (srcIp[i + 1].toInt() and 0xFF)
+        }
+        // Pseudo-header: Destination IPv6 (16 bytes = 8 shorts)
+        for (i in 0 until 16 step 2) {
+            sum += ((dstIp[i].toInt() and 0xFF) shl 8) or (dstIp[i + 1].toInt() and 0xFF)
+        }
+        // Pseudo-header: UDP Length
+        sum += udpLength
+        // Pseudo-header: Next Header (17 for UDP)
+        sum += 17
+
+        // UDP Header + Payload
+        var i = 0
+        var remaining = udpLength
+        while (remaining > 1) {
+            sum += ((udpPacket[i].toInt() and 0xFF) shl 8) or (udpPacket[i + 1].toInt() and 0xFF)
+            i += 2
+            remaining -= 2
+        }
+        if (remaining == 1) {
+            sum += (udpPacket[i].toInt() and 0xFF) shl 8
+        }
+
+        while (sum shr 16 != 0L) {
+            sum = (sum and 0xFFFF) + (sum shr 16)
+        }
+
+        val res = (sum.inv() and 0xFFFF).toInt()
+        return if (res == 0) 0xFFFF else res
     }
 
     override fun onDestroy() {

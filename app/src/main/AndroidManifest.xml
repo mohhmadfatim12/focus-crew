@@ -6,17 +6,28 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- Declare query capability to discover launchable user apps for the block picker -->
+    <!-- Declare query capability to discover launchable user apps and web browsers -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 
@@ -47,6 +58,8 @@
             android:name=".ui.blocker.CalmBlockActivity"
             android:exported="true"
             android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.FocusCrew" />
 
@@ -55,13 +68,15 @@
             android:name=".ui.reel.TranceBreakerActivity"
             android:exported="true"
             android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.FocusCrew" />
 
         <!-- Full-Screen Alarm Activity for Exact Task Alarms -->
         <activity
             android:name=".ui.taskalarm.TaskAlarmFullScreenActivity"
-            android:exported="false"
+            android:exported="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:launchMode="singleTop"
@@ -104,7 +119,11 @@
         <!-- TaskAlarm Alarm Trigger Receiver -->
         <receiver
             android:name=".service.taskalarm.TaskAlarmReceiver"
-            android:exported="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.focuscrew.app.action.ALARM_TRIGGER" />
+            </intent-filter>
+        </receiver>
 
         <!-- TaskAlarm Notification Quick Actions (Complete & Snooze) -->
         <receiver

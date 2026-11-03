@@ -24,7 +24,21 @@ android {
     }
 
     signingConfigs {
+        create("release") {
+            storeFile = file("focuscrew-release.jks")
+            storePassword = "focuscrew2026"
+            keyAlias = "focuscrew"
+            keyPassword = "focuscrew2026"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+            enableV4Signing = true
+        }
         getByName("debug") {
+            storeFile = file("focuscrew-release.jks")
+            storePassword = "focuscrew2026"
+            keyAlias = "focuscrew"
+            keyPassword = "focuscrew2026"
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true
@@ -35,14 +49,14 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

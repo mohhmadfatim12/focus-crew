@@ -23,7 +23,7 @@ object FuzzyAdultContentDetector {
      */
     val SINGLE_WORD_KEYWORDS: Set<String> = setOf(
         // Primary explicit terms (Note: 'sex' alone is intentionally allowed for biology/education research, while 'sex video' etc. are strictly blocked in PHRASE_KEYWORDS)
-        "porn", "porno", "pornography", "xxx", "xxxx", "hentai",
+        "porn", "porno", "pornography", "xxx", "xxxx", "hentai", "pr0n", "pron", "p0rn", "s3x",
         "fuck", "fucking", "fucker", "pussy", "boobs", "boob", "tits", "tit",
         "dick", "cock", "nude", "nudes", "naked", "anal", "milf", "dildo", "vibrator",
         "cuckold", "cuck", "shemale", "tranny", "futanari", "onlyfans", "fansly",
@@ -56,14 +56,29 @@ object FuzzyAdultContentDetector {
         "hardcore sex", "hardcore video", "hardcore videos", "hardcore porn",
         "sex tape", "sex clip", "sex clips", "sex movie", "sex movies", "sex scenes", "sex scene",
         "hot sex", "rough sex", "watch sex", "free sex", "public sex", "phone sex",
+        "sex pic", "sex pics", "sex photo", "sex photos", "sex images", "sex image", "sex pictures",
+        "porn image", "porn images", "porn pic", "porn pics", "porn photo", "porn photos", "porn picture", "porn pictures",
+        "nude pic", "nude pics", "nude photo", "nude photos", "nude image", "nude images", "nude picture", "nude pictures",
+        "naked pic", "naked pics", "naked photo", "naked photos", "naked image", "naked images", "naked picture", "naked pictures",
+        "xxx pic", "xxx pics", "xxx photo", "xxx photos", "xxx image", "xxx images",
+        "hentai pic", "hentai pics", "hentai image", "hentai images",
+        "boobs pic", "boobs pics", "boobs photo", "boobs photos", "boobs image", "boobs images",
+        "tits pic", "tits pics", "tits photo", "pussy pic", "pussy pics", "pussy image", "pussy images",
+        "sexy pic", "sexy pics", "sexy photo", "sexy photos", "sexy image", "sexy images",
+        "hot pic", "hot pics", "hot photo", "hot photos", "hot image", "hot images",
+        "sex story", "sex stories", "sex toy", "sex toys", "sex position", "sex positions",
+        "oral sex", "cyber sex", "cybersex", "having sex", "sex with", "make sex", "sex film", "sex films",
         "blow job", "hand job", "foot job", "tit job", "rim job", "cum shot", "gang bang",
         "deep throat", "doggy style", "doggystyle", "reverse cowgirl", "missionary sex",
         "watch porn", "free porn", "hot porn", "top porn", "best porn", "new porn",
         "sexy girl", "sexy girls", "hot girl video", "hot girl videos", "strip tease",
         "striptease", "lap dance", "call girl", "sex worker", "sex chat", "dirty chat",
         "blue film", "safe=off", "safe=images", "safesearch off", "safesearch: off",
-        "safesearch=0", "safesearch=off", "adlt=off",
-        "turn off safesearch", "disable safesearch", "google.com/safesearch",
+        "safesearch=0", "safesearch=off", "adlt=off", "adlt=demote", "kp=-2",
+        "turn off safesearch", "turn safesearch off", "disable safesearch", "disable safe search",
+        "turn off safe search", "turn safe search off", "how to turn off safesearch", "safesearch is off",
+        "google.com/safesearch", "bing.com/account/general", "duckduckgo.com/settings", "google.com/preferences",
+        "porn gif", "porn gifs", "sex gif", "sex gifs", "nude gif", "nude gifs", "xxx gif", "xxx gifs",
         "adult video", "adult movie", "adult film", "adult content", "18+ video", "18+ content",
         "nsfw video", "nsfw pics", "nsfw content", "leaked nudes", "leaked video", "revenge porn",
         "deepfake porn", "deepfake nude", "tiktok porn", "tiktok nude", "tiktok nsfw",
@@ -90,7 +105,9 @@ object FuzzyAdultContentDetector {
         "online", "only",
         "sex", "sexual", "sexuality", "biology", "research", "medical", "education", "study",
         "sussex", "middlesex", "essex", "unisex", "cocktail",
-        "therapist", "assessment", "scunthorpe", "dickens"
+        "therapist", "assessment", "scunthorpe", "dickens",
+        "squirrel", "throat", "razer", "rate", "focus", "vault", "note", "app", "apps",
+        "whatsapp", "game", "games", "fire", "freefire", "pubg", "youtube", "google", "android", "settings"
     )
 
     /**
@@ -257,26 +274,26 @@ object FuzzyAdultContentDetector {
      */
     private val DANGER_NGRAMS: Set<String> = setOf(
         "xxx", "xxxx",
-        "porn", "pron", "prno", "oprn",
+        "porn",
         "xvideo", "xnxx", "xham",
         "henta", "ntai",
         "blowj", "lowjo",
         "gangb", "angba",
-        "deept", "eepth", "hroat",
+        "deept", "eepth",
         "cumsh", "umshot",
         "bukka", "ukkak",
         "handj", "footj", "titjo",
         "bonda", "ndag",
-        "squir", "quirt",
+        "squirt", // Not 'squir' which triggers on 'squirrel'
         "voyeu", "oyeur",
         "mastur", "asturb",
         "orgasm", "rgasm",
         "fappi", "wanki", "gooni",
         "nhent", "ehent",
         "chaturbat", "livejasm",
-        "onlyf", "nlyfa",
-        "braze", "razer", // brazzers
-        "xrate"
+        "onlyfans", // Not 'onlyf' which triggers on 'only for'
+        "brazzer", // Not 'razer' which triggers on Razer gaming gear
+        "xrated"
     )
 
     /**

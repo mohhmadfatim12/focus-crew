@@ -241,25 +241,104 @@ object DnsPacketParser {
 
     // IP Constants
     val BLACKHOLE_IP = byteArrayOf(0, 0, 0, 0)
-    // Google SafeSearch VIP: 216.239.38.120 (forcesafesearch.google.com)
+    val BLACKHOLE_IPV6 = ByteArray(16)
+    // Google SafeSearch VIP: 216.239.38.120 (forcesafesearch.google.com IPv4)
     val GOOGLE_SAFESEARCH_IP = byteArrayOf(216.toByte(), 239.toByte(), 38.toByte(), 120.toByte())
+    // Google SafeSearch VIP IPv6: 2001:4860:4806::78 (forcesafesearch.google.com IPv6)
+    val GOOGLE_SAFESEARCH_IPV6 = byteArrayOf(
+        0x20.toByte(), 0x01.toByte(), 0x48.toByte(), 0x60.toByte(),
+        0x48.toByte(), 0x06.toByte(), 0x00.toByte(), 0x00.toByte(),
+        0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(),
+        0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x78.toByte()
+    )
     // Bing Strict SafeSearch VIP: 204.79.197.220 (strict.bing.com)
     val BING_SAFESEARCH_IP = byteArrayOf(204.toByte(), 79.toByte(), 197.toByte(), 220.toByte())
     // DuckDuckGo SafeSearch VIP: 52.142.124.215 (safe.duckduckgo.com)
     val DUCKDUCKGO_SAFESEARCH_IP = byteArrayOf(52.toByte(), 142.toByte(), 124.toByte(), 215.toByte())
 
+    /**
+     * Build an AAAA-record response for a domain, resolving it to a custom IPv6 address.
+     * Used for IPv6 Google SafeSearch VIP (2001:4860:4806::78) and IPv6 blackholing.
+     */
+    fun buildIpv6Response(query: DnsQuery, ipv6Bytes: ByteArray): ByteArray {
+        val response = ByteArrayOutputStream()
+
+        // Transaction ID (echoed from query)
+        response.write((query.transactionId shr 8) and 0xFF)
+        response.write(query.transactionId and 0xFF)
+
+        // Flags: QR=1 (response), AA=1 (authoritative), RD=1, RA=1, RCODE=0 (No Error)
+        response.write(0x81)
+        response.write(0x80)
+
+        // QDCOUNT = 1, ANCOUNT = 1
+        response.write(0x00)
+        response.write(0x01)
+        response.write(0x00)
+        response.write(0x01)
+
+        // NSCOUNT = 0, ARCOUNT = 0
+        response.write(0x00)
+        response.write(0x00)
+        response.write(0x00)
+        response.write(0x00)
+
+        // Copy original question section
+        val questionStart = 12
+        if (query.rawPacket.size > questionStart) {
+            var pos = questionStart
+            while (pos < query.rawPacket.size) {
+                val len = query.rawPacket[pos].toInt() and 0xFF
+                if (len == 0) {
+                    pos++
+                    break
+                }
+                pos += len + 1
+            }
+            pos += 4 // QTYPE + QCLASS
+            val questionEnd = minOf(pos, query.rawPacket.size)
+            response.write(query.rawPacket.copyOfRange(questionStart, questionEnd))
+        }
+
+        // Answer section: pointer to domain name in question
+        response.write(0xC0) // Compression pointer
+        response.write(0x0C) // Offset 12 (start of question name)
+
+        // TYPE = AAAA (0x001C)
+        response.write(0x00)
+        response.write(0x1C)
+
+        // CLASS = IN (0x0001)
+        response.write(0x00)
+        response.write(0x01)
+
+        // TTL = 300 seconds
+        response.write(0x00)
+        response.write(0x00)
+        response.write(0x01)
+        response.write(0x2C)
+
+        // RDLENGTH = 16 (IPv6 address)
+        response.write(0x00)
+        response.write(0x10)
+
+        // RDATA (16 bytes IPv6)
+        response.write(ipv6Bytes)
+
+        return response.toByteArray()
+    }
+
     fun buildBlockedResponse(query: DnsQuery): ByteArray {
-        return if (query.queryType == 1) {
-            buildIpResponse(query, BLACKHOLE_IP)
+        return if (query.queryType == 28) {
+            buildIpv6Response(query, BLACKHOLE_IPV6)
         } else {
-            buildNxdomainResponse(query)
+            buildIpResponse(query, BLACKHOLE_IP)
         }
     }
 
     fun buildGoogleSafeSearchResponse(query: DnsQuery): ByteArray {
         return if (query.queryType == 28) {
-            // For AAAA (IPv6), return NXDOMAIN so client immediately uses IPv4 SafeSearch VIP
-            buildNxdomainResponse(query)
+            buildIpv6Response(query, GOOGLE_SAFESEARCH_IPV6)
         } else {
             buildIpResponse(query, GOOGLE_SAFESEARCH_IP)
         }

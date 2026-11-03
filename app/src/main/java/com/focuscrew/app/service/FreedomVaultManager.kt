@@ -55,7 +55,7 @@ object FreedomVaultManager {
             KEY_WHY_NOTE,
             "I am reclaiming my focus, energy, and self-respect. My mind is my sanctuary."
         ) ?: ""
-        val dangerEnabled = p.getBoolean(KEY_DANGER_ENABLED, true)
+        val dangerEnabled = p.getBoolean(KEY_DANGER_ENABLED, false)
         val startH = p.getInt(KEY_DANGER_START_H, 23)
         val startM = p.getInt(KEY_DANGER_START_M, 0)
         val endH = p.getInt(KEY_DANGER_END_H, 6)

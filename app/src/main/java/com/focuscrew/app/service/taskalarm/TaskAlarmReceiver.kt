@@ -40,6 +40,9 @@ class TaskAlarmReceiver : BroadcastReceiver() {
             wakeLock?.acquire(45_000L) // 45 seconds wake lock
         } catch (_: Exception) {}
 
+        // 0. Start continuous loud alarm sound & vibration immediately
+        AlarmSoundRinger.start(context)
+
         // 1. Show notification with alarm sound, vibration, and Done/Snooze action buttons
         TaskAlarmNotificationService.showNotification(
             context = context,

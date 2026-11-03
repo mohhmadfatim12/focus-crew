@@ -3,8 +3,10 @@ package com.focuscrew.app.ui.taskalarm
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -105,6 +107,7 @@ fun TaskAlarmScreen(
     var showCreateSheet by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<TaskAlarmEntity?>(null) }
     var showBackupDialog by remember { mutableStateOf(false) }
+    var taskToDelete by remember { mutableStateOf<TaskAlarmEntity?>(null) }
 
     val now = System.currentTimeMillis()
     val calNow = Calendar.getInstance()
@@ -331,7 +334,7 @@ fun TaskAlarmScreen(
                             showCreateSheet = true
                         },
                         onDelete = {
-                            scope.launch { repository.deleteTask(task.id) }
+                            taskToDelete = task
                         },
                         onStartFocus = {
                             onStartFocusTimer(task.title)
@@ -393,6 +396,69 @@ fun TaskAlarmScreen(
         )
     }
 
+    // Delete Confirmation Dialog (Triggered on hold/long press or delete button)
+    if (taskToDelete != null) {
+        val task = taskToDelete!!
+        AlertDialog(
+            onDismissRequest = { taskToDelete = null },
+            title = {
+                Text("Delete Alarm", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Are you sure to delete this alarm?",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "⏰ " + task.title,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (task.description.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = task.description,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            repository.deleteTask(task.id)
+                            Toast.makeText(context, "🗑️ Deleted '${task.title}'", Toast.LENGTH_SHORT).show()
+                        }
+                        taskToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) {
+                    Text("Delete Alarm", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { taskToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Backup & Restore Dialog
     if (showBackupDialog) {
         BackupRestoreDialog(
@@ -443,6 +509,7 @@ fun MetricCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskCardItem(
     task: TaskAlarmEntity,
@@ -478,7 +545,13 @@ fun TaskCardItem(
             1.dp,
             if (isOverdue) Color(0xFFFCA5A5) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(
+                onClick = onEdit,
+                onLongClick = onDelete
+            )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(

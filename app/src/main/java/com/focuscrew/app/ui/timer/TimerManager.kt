@@ -358,6 +358,9 @@ object TimerManager {
                 if (status is TimerStatus.Completed) {
                     BlockerManager.setBlockingActive(false)
                     stopTicker()
+                    appContext?.let { ctx ->
+                        TimerNotificationManager.notifySessionCompleted(ctx, activeSubject)
+                    }
 
                     // Record completed session in database safely awaiting start job
                     val startJob = sessionStartJob

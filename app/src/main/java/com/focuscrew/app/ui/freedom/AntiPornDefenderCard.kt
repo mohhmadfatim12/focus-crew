@@ -180,38 +180,26 @@ fun AntiPornDefenderCard() {
                     )
                 }
 
-                Switch(
-                    checked = isSafeSearch,
-                    onCheckedChange = { AntiPornDefenderManager.setSafeSearchEnforced(it) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = BritishRacingSage,
-                        uncheckedThumbColor = MutedCharcoalOlive,
-                        uncheckedTrackColor = WarmLinen
+                Box(
+                    modifier = Modifier
+                        .background(BritishRacingSage.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "🔒 LOCKED ON",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BritishRacingSage
                     )
-                )
+                }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Quick Link to Google SafeSearch Settings
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "🔗 Tap to lock Google SafeSearch to 'Filter' mode",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = AntiqueHoneyBrass,
-                modifier = Modifier
-                    .clickable {
-                        try {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/safesearch")).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    .padding(vertical = 4.dp)
+                text = "🛡️ SafeSearch is permanently enforced. Attempts to disable it in search engines or browser settings are automatically blocked.",
+                fontSize = 10.5.sp,
+                color = MutedCharcoalOlive,
+                lineHeight = 14.sp
             )
 
             Spacer(modifier = Modifier.height(16.dp))

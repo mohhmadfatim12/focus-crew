@@ -279,6 +279,44 @@ fun SettingsScreen(
                     }
                 )
 
+                if (!isServiceConnected && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "⚠️ Android 13+ 'Restricted setting' Greyed Out?",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = "Because this APK was downloaded directly, Android locks the switch.\nTap 'Unlock in App Info' -> tap top-right ⋮ -> 'Allow restricted settings' -> enter PIN.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
+                                lineHeight = 15.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    com.focuscrew.app.util.RestrictedSettingsHelper.openAppInfoForRestrictedSettings(context)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary
+                                ),
+                                modifier = Modifier.fillMaxWidth().height(36.dp)
+                            ) {
+                                Text("🔓 1. Unlock in App Info", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(14.dp))
                 HorizontalDivider(color = OutlineVariantColor)
                 Spacer(modifier = Modifier.height(14.dp))
@@ -328,6 +366,46 @@ fun SettingsScreen(
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(intent)
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = OutlineVariantColor)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 4. Usage Access (Exact Hardware Screen Time)
+                val hasUsageAccess = com.focuscrew.app.util.UsageStatsHelper.hasUsageAccessPermission(context)
+                PermissionDeepDisclosureItem(
+                    title = "Usage Access (Exact Screen Time)",
+                    isGranted = hasUsageAccess,
+                    whyNeeded = "Queries exact Android Digital Wellbeing system screen time for Instagram & YouTube down to the second (zero estimates).",
+                    signalsProcessed = listOf(
+                        "Foreground time of Instagram (com.instagram.android) and YouTube (com.google.android.youtube) today."
+                    ),
+                    privacyBoundary = "STRICT: FocusCrew only inspects Instagram and YouTube screen time totals. No other app data is queried.",
+                    leavesDevice = "0 bytes (Stays 100% on-device).",
+                    onGrantClick = {
+                        com.focuscrew.app.util.UsageStatsHelper.openUsageAccessSettings(context)
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = OutlineVariantColor)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 5. Battery Optimization Exclusion (24/7 Background Keeper)
+                val isBatteryIgnored = com.focuscrew.app.util.RestrictedSettingsHelper.isBatteryOptimizationIgnored(context)
+                PermissionDeepDisclosureItem(
+                    title = "Ignore Battery Optimizations",
+                    isGranted = isBatteryIgnored,
+                    whyNeeded = "Prevents aggressive Android & OEM battery killers from silently killing the blocker when your phone is locked or unplugged.",
+                    signalsProcessed = listOf(
+                        "System power manager battery whitelist status only."
+                    ),
+                    privacyBoundary = "STRICT: FocusCrew is designed for ultra-low battery consumption (< 0.8% daily).",
+                    leavesDevice = "0 bytes (Stays 100% on-device).",
+                    onGrantClick = {
+                        com.focuscrew.app.util.RestrictedSettingsHelper.requestIgnoreBatteryOptimization(context)
                     }
                 )
             }

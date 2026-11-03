@@ -48,10 +48,18 @@ class CalmBlockActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val blockedPackage = intent.getStringExtra(EXTRA_BLOCKED_PACKAGE) ?: "This app"
-        val rawLabel = intent.getStringExtra(EXTRA_BLOCKED_LABEL) ?: blockedPackage
-        blockedLabelState.value = rawLabel
-        blockTypeState.value = intent.getStringExtra(EXTRA_BLOCK_TYPE) ?: inferBlockType(rawLabel)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+
+        updateFromIntent(intent)
 
         // When user taps system back button, take them safely to the Android Home screen
         onBackPressedDispatcher.addCallback(this) {
@@ -90,6 +98,11 @@ class CalmBlockActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        updateFromIntent(intent)
+    }
+
+    private fun updateFromIntent(intent: Intent?) {
+        if (intent == null) return
         val blockedPackage = intent.getStringExtra(EXTRA_BLOCKED_PACKAGE) ?: "This app"
         val rawLabel = intent.getStringExtra(EXTRA_BLOCKED_LABEL) ?: blockedPackage
         blockedLabelState.value = rawLabel
@@ -99,11 +112,11 @@ class CalmBlockActivity : ComponentActivity() {
     private fun inferBlockType(label: String): String {
         val lower = label.lowercase()
         return when {
+            lower.contains("curfew") || lower.contains("danger zone") || lower.contains("bedtime") -> BLOCK_TYPE_CURFEW
             lower.contains("safesearch") || lower.contains("dns") -> BLOCK_TYPE_SAFESEARCH
-            lower.contains("adult") || lower.contains("wrong thing") || lower.contains("domain") ||
-            lower.contains("curfew") || lower.contains("keyword") || lower.contains("incognito") ||
-            lower.contains("leet") || lower.contains("squashed") || lower.contains("obfuscated") ||
-            lower.contains("phonetic") || lower.contains("ngram") || lower.contains("compound") -> BLOCK_TYPE_ADULT_CONTENT
+            lower.contains("adult") || lower.contains("wrong thing") || lower.contains("explicit") ||
+            lower.contains("porn") || lower.contains("sex") || lower.contains("xxx") ||
+            lower.contains("nude") || lower.contains("naked") || lower.contains("hentai") -> BLOCK_TYPE_ADULT_CONTENT
             else -> BLOCK_TYPE_TIMER_APP
         }
     }
@@ -125,6 +138,7 @@ class CalmBlockActivity : ComponentActivity() {
         const val BLOCK_TYPE_TIMER_APP = "timer_app"
         const val BLOCK_TYPE_ADULT_CONTENT = "adult_content"
         const val BLOCK_TYPE_SAFESEARCH = "safesearch"
+        const val BLOCK_TYPE_CURFEW = "curfew"
     }
 }
 
@@ -139,6 +153,7 @@ fun CalmBlockScreen(
     val snapshot by TimerManager.snapshot.collectAsState()
     val isAdultOrWrongSearch = blockType == CalmBlockActivity.BLOCK_TYPE_ADULT_CONTENT
     val isSafeSearchLock = blockType == CalmBlockActivity.BLOCK_TYPE_SAFESEARCH
+    val isCurfew = blockType == CalmBlockActivity.BLOCK_TYPE_CURFEW
 
     val quotes = remember {
         listOf(
@@ -160,10 +175,10 @@ fun CalmBlockScreen(
         Card(
             shape = CircleShape,
             colors = CardDefaults.cardColors(
-                containerColor = if (isAdultOrWrongSearch || isSafeSearchLock) {
-                    MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
-                } else {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                containerColor = when {
+                    isAdultOrWrongSearch || isSafeSearchLock -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                    isCurfew -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.20f)
+                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                 }
             ),
             modifier = Modifier.size(76.dp)
@@ -174,7 +189,12 @@ fun CalmBlockScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = if (isAdultOrWrongSearch) "🚫" else if (isSafeSearchLock) "🔒" else "🌱",
+                    text = when {
+                        isAdultOrWrongSearch -> "🚫"
+                        isSafeSearchLock -> "🔒"
+                        isCurfew -> "🌙"
+                        else -> "🌱"
+                    },
                     fontSize = 36.sp
                 )
             }
@@ -186,13 +206,18 @@ fun CalmBlockScreen(
             text = when {
                 isAdultOrWrongSearch -> "You Are Searching the Wrong Thing!"
                 isSafeSearchLock -> if (blockedAppLabel.contains("DNS", ignoreCase = true)) "DNS Shield Is Locked" else "Safe Search Is Locked"
+                isCurfew -> "Danger Zone Bedtime Curfew"
                 else -> "Take a Breath"
             },
             style = MaterialTheme.typography.headlineLarge.copy(
-                fontSize = if (isAdultOrWrongSearch) 23.sp else if (isSafeSearchLock) 24.sp else 30.sp,
+                fontSize = if (isAdultOrWrongSearch) 23.sp else if (isSafeSearchLock || isCurfew) 24.sp else 30.sp,
                 fontWeight = FontWeight.ExtraBold
             ),
-            color = if (isAdultOrWrongSearch) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            color = when {
+                isAdultOrWrongSearch -> MaterialTheme.colorScheme.error
+                isCurfew -> MaterialTheme.colorScheme.secondary
+                else -> MaterialTheme.colorScheme.primary
+            },
             textAlign = TextAlign.Center
         )
 
@@ -202,6 +227,7 @@ fun CalmBlockScreen(
             text = when {
                 isAdultOrWrongSearch -> "FocusCrew intercepted explicit search terms to protect your discipline & dopamine."
                 isSafeSearchLock -> if (blockedAppLabel.contains("DNS", ignoreCase = true)) "DNS tampering is locked to preserve Nuclear Shield SafeSearch." else "Safe Search is locked on to protect your focus."
+                isCurfew -> "Rest and recharge. This app is paused during your curfew window (11:00 PM – 6:00 AM) to protect your sleep."
                 else -> "You chose to focus on \"${snapshot.activeSubject}\" right now."
             },
             style = MaterialTheme.typography.bodyMedium,
@@ -229,11 +255,16 @@ fun CalmBlockScreen(
                     text = when {
                         isAdultOrWrongSearch -> "⚠️ You Are Searching the Wrong Thing"
                         isSafeSearchLock -> "Safe Search Mode Locked"
+                        isCurfew -> blockedAppLabel
                         else -> blockedAppLabel
                     },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = if (isAdultOrWrongSearch) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    color = when {
+                        isAdultOrWrongSearch -> MaterialTheme.colorScheme.error
+                        isCurfew -> MaterialTheme.colorScheme.secondary
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
                     textAlign = TextAlign.Center
                 )
 
@@ -243,6 +274,7 @@ fun CalmBlockScreen(
                     text = when {
                         isAdultOrWrongSearch -> "You are searching the wrong thing.\nSafeSearch and Focus Shield have blocked this content to protect your discipline and focus."
                         isSafeSearchLock -> "Safe Search mode is permanently locked on. Distracting and unhealthy content cannot be unblurred or turned off."
+                        isCurfew -> "This app is temporarily paused during your late-night danger zone hours to ensure deep recovery and morning energy."
                         else -> "is gently blocked during your focus session"
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -250,7 +282,7 @@ fun CalmBlockScreen(
                     textAlign = TextAlign.Center
                 )
 
-                if (!isAdultOrWrongSearch && !isSafeSearchLock && snapshot.remainingMs > 0) {
+                if (!isAdultOrWrongSearch && !isSafeSearchLock && !isCurfew && snapshot.remainingMs > 0) {
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(

@@ -213,81 +213,83 @@ fun AppPickerScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         // 1. DOPAMINE DETOX BLOCKER (Clean, Minimalist Bar)
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (isDopamineDetoxEnabled) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            },
-            border = BorderStroke(
-                1.dp,
-                if (isDopamineDetoxEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clickable {
-                    val newState = !isDopamineDetoxEnabled
-                    AntiPornDefenderManager.setDefenderEnabled(newState)
-                    AntiPornDefenderManager.setSafeSearchEnforced(newState)
+            val toggleDopamineDetox: (Boolean) -> Unit = { newState ->
+                AntiPornDefenderManager.setDefenderEnabled(newState)
+                AntiPornDefenderManager.setSafeSearchEnforced(newState)
+                FocusCrewVpnService.setVpnEnabled(newState)
+                if (newState) {
+                    val prepare = android.net.VpnService.prepare(context)
+                    if (prepare == null) {
+                        val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
+                        context.startService(vpnIntent)
+                    } else {
+                        vpnPermissionLauncher.launch(prepare)
+                    }
+                } else {
+                    val vpnIntent = Intent(context, FocusCrewVpnService::class.java).apply {
+                        action = "STOP_VPN"
+                    }
+                    context.startService(vpnIntent)
                 }
-        ) {
-            Row(
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isDopamineDetoxEnabled) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                },
+                border = BorderStroke(
+                    1.dp,
+                    if (isDopamineDetoxEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                ),
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clickable {
+                        toggleDopamineDetox(!isDopamineDetoxEnabled)
+                    }
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (isDopamineDetoxEnabled) "🛡️" else "⚪",
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Dopamine Detox Blocker",
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = if (isDopamineDetoxEnabled) "🛡️" else "⚪",
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Dopamine Detox Blocker",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                    }
+
+                    Switch(
+                        checked = isDopamineDetoxEnabled,
+                        onCheckedChange = { newState ->
+                            toggleDopamineDetox(newState)
+                        },
+                        modifier = Modifier.scale(0.8f),
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary
+                        )
                     )
                 }
-
-                Switch(
-                    checked = isDopamineDetoxEnabled,
-                    onCheckedChange = { newState ->
-                        AntiPornDefenderManager.setDefenderEnabled(newState)
-                        AntiPornDefenderManager.setSafeSearchEnforced(newState)
-                        FocusCrewVpnService.setVpnEnabled(newState)
-                        if (newState) {
-                            val prepare = android.net.VpnService.prepare(context)
-                            if (prepare == null) {
-                                val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
-                                context.startService(vpnIntent)
-                            } else {
-                                vpnPermissionLauncher.launch(prepare)
-                            }
-                        } else {
-                            val vpnIntent = Intent(context, FocusCrewVpnService::class.java).apply {
-                                action = "STOP_VPN"
-                            }
-                            context.startService(vpnIntent)
-                        }
-                    },
-                    modifier = Modifier.scale(0.8f),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary
-                    )
-                )
             }
-        }
 
         Spacer(modifier = Modifier.height(8.dp))
 

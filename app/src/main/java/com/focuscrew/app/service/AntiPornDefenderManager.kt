@@ -64,11 +64,75 @@ object AntiPornDefenderManager {
         "com.duckduckgo.mobile.android",        // DuckDuckGo
         "com.vivaldi.browser",                  // Vivaldi
         "com.kiwibrowser.browser",              // Kiwi Browser
-        "com.google.android.googlequicksearchbox", // Google Search Bar / App
-        "com.google.android.apps.searchlite",   // Google Go
         "com.android.browser",                  // AOSP Browser
         "com.ucmobile.intl"                     // UC Browser
     )
+
+    val NON_BROWSER_PACKAGES = setOf(
+        "com.whatsapp",
+        "com.whatsapp.w4b",
+        "com.instagram.android",
+        "com.facebook.katana",
+        "com.facebook.orca",
+        "com.snapchat.android",
+        "org.telegram.messenger",
+        "org.telegram.plus",
+        "com.twitter.android",
+        "com.x.android",
+        "com.discord",
+        "com.viber.voip",
+        "com.tencent.mm",
+        "com.google.android.apps.messaging",
+        "com.samsung.android.messaging",
+        "com.google.android.talk",
+        "com.skype.raider",
+        "com.google.android.youtube",
+        "com.google.android.apps.youtube.music",
+        "com.netflix.mediaclient",
+        "com.spotify.music",
+        "com.reddit.frontpage",
+        "com.zhiliaoapp.musically",
+        "com.ss.android.ugc.trill",
+        "com.tinder",
+        "com.bumble.app",
+        "com.motorola.launcher3",
+        "com.google.android.apps.nexuslauncher",
+        "com.android.launcher3",
+        "com.mi.android.globallauncher",
+        "com.sec.android.app.launcher",
+        "com.oppo.launcher",
+        "com.vivo.launcher",
+        "com.transsion.launcher",
+        "com.dts.freefireth",
+        "com.dts.freefiremax",
+        "com.tencent.ig",
+        "com.pubg.imobile",
+        "com.pubg.krmobile"
+    )
+
+    fun isNonBrowserApp(packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        if (NON_BROWSER_PACKAGES.contains(packageName)) return true
+        val lower = packageName.lowercase()
+        return lower.contains("whatsapp") ||
+               lower.contains("telegram") ||
+               lower.contains("instagram") ||
+               lower.contains("facebook") ||
+               lower.contains("messenger") ||
+               lower.contains("snapchat") ||
+               lower.contains("discord") ||
+               lower.contains("twitter") ||
+               lower.contains("youtube") ||
+               lower.contains("tiktok") ||
+               lower.contains("reddit") ||
+               lower.contains("tinder") ||
+               lower.contains("bumble") ||
+               lower.contains("netflix") ||
+               lower.contains("spotify") ||
+               lower.contains("game") ||
+               lower.contains("launcher") ||
+               lower.contains("quicksearchbox")
+    }
 
     private val KNOWN_URL_BAR_IDS = setOf(
         "com.android.chrome:id/url_bar",
@@ -84,9 +148,7 @@ object AntiPornDefenderManager {
         "org.mozilla.firefox:id/mozac_browser_toolbar_url_view",
         "com.sec.android.app.sbrowser:id/location_bar_edit_text",
         "com.microsoft.emmx:id/search_box",
-        "com.microsoft.emmx:id/url_bar",
-        "com.google.android.googlequicksearchbox:id/googleapp_search_box",
-        "com.google.android.googlequicksearchbox:id/search_edit_frame"
+        "com.microsoft.emmx:id/url_bar"
     )
 
 
@@ -102,7 +164,9 @@ object AntiPornDefenderManager {
         _isDefenderEnabled.value = p.getBoolean(KEY_DEFENDER_ENABLED, true)
         _blockedSearchesCount.value = p.getInt(KEY_BLOCKED_SEARCHES_COUNT, 0)
         _blockedSitesCount.value = p.getInt(KEY_BLOCKED_SITES_COUNT, 0)
-        _isSafeSearchEnforced.value = p.getBoolean(KEY_SAFESEARCH_ENABLED, true)
+        // SafeSearch is PERMANENTLY locked on — user can never disable it!
+        _isSafeSearchEnforced.value = true
+        p.edit().putBoolean(KEY_SAFESEARCH_ENABLED, true).apply()
     }
 
     fun setDefenderEnabled(enabled: Boolean) {
@@ -110,9 +174,10 @@ object AntiPornDefenderManager {
         prefs?.edit()?.putBoolean(KEY_DEFENDER_ENABLED, enabled)?.apply()
     }
 
-    fun setSafeSearchEnforced(enforced: Boolean) {
-        _isSafeSearchEnforced.value = enforced
-        prefs?.edit()?.putBoolean(KEY_SAFESEARCH_ENABLED, enforced)?.apply()
+    fun setSafeSearchEnforced(enforced: Boolean = true) {
+        // SafeSearch is permanently locked on — user can never turn it off!
+        _isSafeSearchEnforced.value = true
+        prefs?.edit()?.putBoolean(KEY_SAFESEARCH_ENABLED, true)?.apply()
     }
 
     fun recordSearchBlocked() {
@@ -129,18 +194,32 @@ object AntiPornDefenderManager {
 
     fun isBrowserPackage(packageName: String): Boolean {
         if (packageName.isBlank()) return false
+        if (isNonBrowserApp(packageName)) return false
         if (SUPPORTED_BROWSER_PACKAGES.contains(packageName)) return true
         val lower = packageName.lowercase()
-        return lower.contains("browser") ||
+        // Never treat launchers, file browsers, media viewers, system components, or webviews as browsers!
+        if (lower.contains("file") || lower.contains("media") || lower.contains("photo") ||
+            lower.contains("gallery") || lower.contains("launcher") ||
+            lower.contains("webview") || lower.contains("setting") || lower.contains("system") ||
+            lower.contains("camera")) {
+            return false
+        }
+        return (lower.endsWith(".browser") || lower.contains(".browser.") || lower.contains("browser_")) ||
                lower.contains("chrome") ||
                lower.contains("firefox") ||
                lower.contains("opera") ||
-               lower.contains("searchbox") ||
-               lower.contains("search") ||
                lower.contains("duckduckgo") ||
-               lower.contains("webview") ||
                lower.contains("sbrowser") ||
                lower.contains("emmx")
+    }
+
+    fun isSearchOrBrowserApp(packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        if (isBrowserPackage(packageName)) return true
+        val lower = packageName.lowercase()
+        return lower == "com.google.android.googlequicksearchbox" ||
+               lower == "com.google.android.apps.searchlite" ||
+               lower.contains("searchbox")
     }
 
     /**
@@ -204,6 +283,365 @@ object AntiPornDefenderManager {
         return null
     }
 
+    /**
+     * SafeSearch Settings Page URLs that must be IMMEDIATELY blocked.
+     * If the user navigates to ANY of these, press BACK instantly — don't even let them see the page!
+     */
+    private val SAFESEARCH_SETTINGS_URLS = listOf(
+        "google.com/safesearch",
+        "google.com/preferences",
+        "google.com/setprefs",
+        "google.com.pk/safesearch",
+        "google.co.in/safesearch",
+        "google.co.uk/safesearch",
+        "bing.com/account/general",
+        "bing.com/account",
+        "bing.com/preferences",
+        "duckduckgo.com/settings",
+        "duckduckgo.com/?kp=",
+        "search.yahoo.com/preferences",
+        "yandex.com/search/customize"
+    )
+
+    /**
+     * Checks if the URL bar text is pointing to a SafeSearch settings page.
+     * Returns true if the URL should be IMMEDIATELY blocked.
+     */
+    fun isNavigatingToSafeSearchSettings(urlText: String): Boolean {
+        val lower = urlText.lowercase().trim()
+        for (pattern in SAFESEARCH_SETTINGS_URLS) {
+            if (lower.contains(pattern)) return true
+        }
+        // Catch URL parameters that disable SafeSearch
+        if (lower.contains("safe=off") ||
+            lower.contains("safesearch=off") ||
+            lower.contains("safesearch=0") ||
+            lower.contains("adlt=off") ||
+            lower.contains("adlt=demote") ||
+            lower.contains("kp=-2") ||
+            lower.contains("safe=images")
+        ) return true
+        return false
+    }
+
+    /**
+     * PROACTIVE SafeSearch settings page detection.
+     * Scans the browser window hierarchy for SafeSearch settings page content.
+     * If detected, returns a trigger string IMMEDIATELY so Layer 2 presses BACK
+     * before the user can even see the SafeSearch options.
+     */
+    fun detectSafeSearchSettingsPage(rootNode: AccessibilityNodeInfo?): String? {
+        if (rootNode == null || !_isSafeSearchEnforced.value) return null
+
+        // 1. Check URL bar — is user navigating to a SafeSearch settings page?
+        for (viewId in KNOWN_URL_BAR_IDS) {
+            try {
+                val nodes = rootNode.findAccessibilityNodeInfosByViewId(viewId)
+                if (!nodes.isNullOrEmpty()) {
+                    for (node in nodes) {
+                        val url = node.text?.toString() ?: ""
+                        if (url.isNotBlank() && isNavigatingToSafeSearchSettings(url)) {
+                            return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. Scan full window text for SafeSearch settings page indicators
+        val allTexts = mutableListOf<String>()
+        collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 40)
+        val windowCombined = allTexts.joinToString(" ").lowercase()
+
+        // Google SafeSearch settings page detection
+        val isGoogleSafeSearchPage = windowCombined.contains("google.com/safesearch") ||
+            (windowCombined.contains("explicit results filter") && windowCombined.contains("filter") && windowCombined.contains("blur")) ||
+            (windowCombined.contains("safesearch") && windowCombined.contains("filter") && windowCombined.contains("blur") && windowCombined.contains("off"))
+
+        if (isGoogleSafeSearchPage) {
+            // Auto-click Filter before pressing BACK to ensure SafeSearch stays locked!
+            tryEnforceFilterMode(rootNode)
+            return "SafeSearch Locked: Google SafeSearch settings page is blocked!"
+        }
+
+        // Bing SafeSearch settings page detection
+        val isBingSafeSearchPage = (windowCombined.contains("bing.com/account") || windowCombined.contains("bing.com/preferences")) &&
+            (windowCombined.contains("safesearch") || windowCombined.contains("safe search"))
+
+        if (isBingSafeSearchPage) {
+            return "SafeSearch Locked: Bing SafeSearch settings page is blocked!"
+        }
+
+        // DuckDuckGo SafeSearch settings page detection
+        val isDdgSafeSearchPage = windowCombined.contains("duckduckgo.com/settings") ||
+            (windowCombined.contains("duckduckgo") && windowCombined.contains("safe search"))
+
+        if (isDdgSafeSearchPage) {
+            return "SafeSearch Locked: DuckDuckGo SafeSearch settings page is blocked!"
+        }
+
+        // Yahoo SafeSearch settings page detection
+        val isYahooSafeSearchPage = windowCombined.contains("search.yahoo.com/preferences") ||
+            (windowCombined.contains("yahoo") && windowCombined.contains("safesearch"))
+
+        if (isYahooSafeSearchPage) {
+            return "SafeSearch Locked: Yahoo SafeSearch settings page is blocked!"
+        }
+
+        return null
+    }
+
+    fun detectSafeSearchTamper(event: android.view.accessibility.AccessibilityEvent?, rootNode: AccessibilityNodeInfo?): String? {
+        if (!_isSafeSearchEnforced.value) return null
+
+        val eventTexts = mutableListOf<String>()
+        if (event != null) {
+            for (t in event.text) {
+                val str = t?.toString()?.lowercase() ?: ""
+                if (str.isNotBlank()) eventTexts.add(str)
+            }
+            val sourceText = event.source?.text?.toString()?.lowercase() ?: ""
+            if (sourceText.isNotBlank()) eventTexts.add(sourceText)
+            val contentDesc = event.contentDescription?.toString()?.lowercase() ?: ""
+            if (contentDesc.isNotBlank()) eventTexts.add(contentDesc)
+        }
+        val eventCombined = eventTexts.joinToString(" ")
+
+        // 0. PROACTIVE: Detect if URL bar is navigating to SafeSearch settings
+        if (isNavigatingToSafeSearchSettings(eventCombined)) {
+            return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
+        }
+
+        // 1. Direct SafeSearch bypass parameter in event text or omnibox
+        if (eventCombined.contains("safesearch=off") ||
+            eventCombined.contains("safesearch=0") ||
+            eventCombined.contains("safe=off") ||
+            eventCombined.contains("safe=images") ||
+            eventCombined.contains("adlt=off") ||
+            eventCombined.contains("adlt=demote") ||
+            eventCombined.contains("kp=-2")
+        ) {
+            return "SafeSearch Locked: SafeSearch is permanently locked on!"
+        }
+
+        // 2. Direct intent to disable SafeSearch
+        if (eventCombined.contains("turn off safesearch") ||
+            eventCombined.contains("turn safesearch off") ||
+            eventCombined.contains("disable safesearch") ||
+            eventCombined.contains("disable safe search") ||
+            eventCombined.contains("turn off safe search") ||
+            eventCombined.contains("turn safe search off") ||
+            eventCombined.contains("safesearch: off") ||
+            eventCombined.contains("safesearch is off") ||
+            eventCombined.contains("safesearch off") ||
+            eventCombined.contains("safe search off") ||
+            eventCombined.contains("turn off explicit results") ||
+            eventCombined.contains("how to disable safesearch") ||
+            eventCombined.contains("how to turn off safesearch") ||
+            eventCombined.contains("remove safesearch") ||
+            eventCombined.contains("unlock safesearch")
+        ) {
+            return "SafeSearch Locked: SafeSearch is permanently locked on!"
+        }
+
+        // 3. PROACTIVE PAGE DETECTION: If the full window is showing a SafeSearch settings page, block it immediately!
+        if (rootNode != null) {
+            val pageDetection = detectSafeSearchSettingsPage(rootNode)
+            if (pageDetection != null) return pageDetection
+        }
+
+        // 4. Whole-window hierarchy analysis for remaining cases
+        if (rootNode != null) {
+            val allTexts = mutableListOf<String>()
+            collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 40)
+            val windowCombined = allTexts.joinToString(" ").lowercase()
+
+            val isSafeSearchSettings = windowCombined.contains("google.com/safesearch") ||
+                (windowCombined.contains("safesearch") && (windowCombined.contains("filter") || windowCombined.contains("blur") || windowCombined.contains("off")))
+
+            if (isSafeSearchSettings) {
+                // If user is inside SafeSearch settings:
+                // ANY interaction is blocked — don't wait for them to tap Off or Blur!
+                // Auto-enforce Filter mode then kick them out!
+                tryEnforceFilterMode(rootNode)
+                return "SafeSearch Locked: SafeSearch Filter mode is permanently locked on!"
+            }
+
+            // Bing SafeSearch settings in window
+            if ((windowCombined.contains("strict") || windowCombined.contains("moderate") || windowCombined.contains("off")) &&
+                windowCombined.contains("safesearch") && windowCombined.contains("bing")) {
+                return "SafeSearch Locked: Bing SafeSearch settings are permanently locked!"
+            }
+
+            // Secure DNS Tamper Prevention
+            if (windowCombined.contains("use secure dns") ||
+                windowCombined.contains("choose another provider") ||
+                windowCombined.contains("custom dns") ||
+                windowCombined.contains("private dns")
+            ) {
+                return "DNS Shield Lock: Secure DNS cannot be changed to bypass protection!"
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * UNBREAKABLE SafeSearch Filter Lock Engine:
+     * 1. Detects if the current screen is a SafeSearch settings interface (Google, Bing, Yahoo, DuckDuckGo).
+     * 2. Automatically clicks "Filter" (or "Strict") if it is not already checked.
+     * 3. Prevents "Off" or "Blur" from remaining selected.
+     */
+    fun enforceSafeSearchFilter(rootNode: AccessibilityNodeInfo?): Boolean {
+        if (rootNode == null || !_isSafeSearchEnforced.value) return false
+
+        // Check visible texts
+        val allTexts = mutableListOf<String>()
+        collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 40)
+        val combined = allTexts.joinToString(" ").lowercase()
+
+        val isSafeSearchContext = (combined.contains("safesearch") || combined.contains("safe search")) &&
+            (combined.contains("filter") || combined.contains("blur") || combined.contains("off") || combined.contains("strict")) ||
+            combined.contains("explicit results") ||
+            combined.contains("google.com/safesearch") ||
+            combined.contains("bing.com/account") ||
+            combined.contains("duckduckgo.com/settings")
+
+        if (!isSafeSearchContext) return false
+
+        // 1. Locate the "Filter" / "Strict" node
+        var filterNode: AccessibilityNodeInfo? = null
+        var isFilterChecked = false
+
+        fun searchFilter(node: AccessibilityNodeInfo?) {
+            if (node == null || filterNode != null) return
+            val t = node.text?.toString()?.trim() ?: ""
+            val d = node.contentDescription?.toString()?.trim() ?: ""
+
+            val isMatch = t.equals("Filter", ignoreCase = true) ||
+                t.equals("Strict", ignoreCase = true) ||
+                t.startsWith("Filter (", ignoreCase = true) ||
+                t.startsWith("Strict (", ignoreCase = true) ||
+                (t.contains("Filter", ignoreCase = true) && (t.contains("explicit", ignoreCase = true) || t.contains("hide", ignoreCase = true))) ||
+                d.equals("Filter", ignoreCase = true) ||
+                d.equals("Strict", ignoreCase = true)
+
+            if (isMatch) {
+                filterNode = node
+                if (node.isChecked) {
+                    isFilterChecked = true
+                }
+                return
+            }
+
+            for (i in 0 until node.childCount) {
+                searchFilter(node.getChild(i))
+                if (filterNode != null) break
+            }
+        }
+
+        searchFilter(rootNode)
+
+        // 2. Also check if "Off" or "Blur" is currently checked
+        var isOffOrBlurChecked = false
+        fun checkOffOrBlur(node: AccessibilityNodeInfo?) {
+            if (node == null || isOffOrBlurChecked) return
+            val t = node.text?.toString()?.trim() ?: ""
+            val d = node.contentDescription?.toString()?.trim() ?: ""
+
+            val isOffOrBlur = t.equals("Off", ignoreCase = true) ||
+                t.equals("Blur", ignoreCase = true) ||
+                t.equals("Moderate", ignoreCase = true) ||
+                t.startsWith("Off (", ignoreCase = true) ||
+                d.equals("Off", ignoreCase = true) ||
+                d.equals("Blur", ignoreCase = true)
+
+            if (isOffOrBlur && node.isChecked) {
+                isOffOrBlurChecked = true
+                return
+            }
+
+            for (i in 0 until node.childCount) {
+                checkOffOrBlur(node.getChild(i))
+                if (isOffOrBlurChecked) break
+            }
+        }
+        checkOffOrBlur(rootNode)
+
+        // If Filter is NOT checked, OR if Off/Blur IS checked -> FORCE CLICK "Filter"!
+        if (filterNode != null && (!isFilterChecked || isOffOrBlurChecked)) {
+            var clicked = false
+            if (filterNode!!.isClickable || filterNode!!.isCheckable) {
+                clicked = filterNode!!.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            if (!clicked) {
+                // Try parent nodes
+                var p = filterNode!!.parent
+                var depth = 0
+                while (p != null && depth < 4 && !clicked) {
+                    if (p.isClickable || p.isCheckable) {
+                        clicked = p.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        break
+                    }
+                    p = p.parent
+                    depth++
+                }
+            }
+            if (clicked) {
+                android.util.Log.d("AntiPornDefender", "🔒 SafeSearch successfully FORCE-LOCKED ON FILTER!")
+                return true
+            }
+        }
+
+        return isFilterChecked
+    }
+
+    /**
+     * Checks if the user is actively attempting to tap "Off" or "Blur" in SafeSearch.
+     */
+    fun isAttemptingToDisableSafeSearch(event: android.view.accessibility.AccessibilityEvent?, rootNode: AccessibilityNodeInfo?): Boolean {
+        if (!_isSafeSearchEnforced.value) return false
+        val source = try { event?.source } catch (_: Exception) { null }
+        val clickedText = source?.text?.toString()?.trim() ?: ""
+        val clickedDesc = source?.contentDescription?.toString()?.trim() ?: ""
+        val eventTexts = event?.text?.joinToString(" ") { it?.toString() ?: "" } ?: ""
+        val clickCombined = "$clickedText $clickedDesc $eventTexts".lowercase()
+
+        val isOffOrBlurAttempt = clickCombined.contains("off") ||
+            clickCombined.contains("blur") ||
+            clickCombined.contains("turn off") ||
+            clickCombined.contains("moderate") ||
+            clickCombined.contains("don't filter")
+
+        if (!isOffOrBlurAttempt) return false
+
+        // Check if current screen is SafeSearch
+        val allTexts = mutableListOf<String>()
+        collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 35)
+        val windowCombined = allTexts.joinToString(" ").lowercase()
+
+        return (windowCombined.contains("safesearch") || windowCombined.contains("safe search")) &&
+               (windowCombined.contains("filter") || windowCombined.contains("explicit") || windowCombined.contains("google.com/safesearch"))
+    }
+
+    private fun tryEnforceFilterMode(node: AccessibilityNodeInfo?) {
+        enforceSafeSearchFilter(node)
+    }
+
+    private fun collectVisibleTexts(node: AccessibilityNodeInfo?, outList: MutableList<String>, depth: Int, maxDepth: Int) {
+        if (node == null || depth > maxDepth) return
+        val t = node.text?.toString()
+        if (!t.isNullOrBlank()) outList.add(t)
+        val d = node.contentDescription?.toString()
+        if (!d.isNullOrBlank()) outList.add(d)
+
+        val count = node.childCount
+        for (i in 0 until count) {
+            val child = node.getChild(i) ?: continue
+            collectVisibleTexts(child, outList, depth + 1, maxDepth)
+        }
+    }
+
     private fun scanNodeForSafeSearchTamper(node: AccessibilityNodeInfo?, depth: Int, maxDepth: Int): String? {
         if (node == null || depth > maxDepth) return null
 
@@ -211,30 +649,62 @@ object AntiPornDefenderManager {
         val desc = node.contentDescription?.toString()?.lowercase() ?: ""
         val combined = "$text $desc"
 
-        if (combined.contains("google.com/safesearch") ||
-            combined.contains("safe=off") ||
+        // URL-bar level: Detect navigation to SafeSearch settings pages
+        if (isNavigatingToSafeSearchSettings(combined)) {
+            return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
+        }
+
+        if (combined.contains("safe=off") ||
             combined.contains("safe=images") ||
             combined.contains("safesearch=off") ||
             combined.contains("safesearch=0") ||
-            combined.contains("adlt=off")
+            combined.contains("adlt=off") ||
+            combined.contains("adlt=demote") ||
+            combined.contains("kp=-2")
         ) {
             return "SafeSearch Locked: Titan Fortress permanently locks SafeSearch on!"
         }
 
-        // Only trigger on explicit intent to turn off SafeSearch, NEVER on Google's own "SafeSearch: Filter" or "Manage SafeSearch" labels!
+        // Catch explicit requests to turn off or disable SafeSearch
         if (combined.contains("turn off safesearch") ||
             combined.contains("turn safesearch off") ||
             combined.contains("disable safesearch") ||
             combined.contains("disable safe search") ||
-            combined.contains("turn off safe search")
+            combined.contains("turn off safe search") ||
+            combined.contains("turn safe search off") ||
+            combined.contains("safesearch off") ||
+            combined.contains("safe search off") ||
+            combined.contains("how to turn off safesearch") ||
+            combined.contains("safesearch: off") ||
+            combined.contains("safesearch is off") ||
+            combined.contains("off - turn off explicit") ||
+            combined.contains("turn off explicit results") ||
+            combined.contains("how to disable safesearch") ||
+            combined.contains("remove safesearch") ||
+            combined.contains("unlock safesearch") ||
+            combined.contains("bypass safesearch")
         ) {
             return "SafeSearch Locked: Titan Fortress permanently locks SafeSearch on!"
+        }
+
+        // SafeSearch settings page indicators (Google, Bing, DuckDuckGo, Yahoo)
+        // Detect the page even if user hasn't clicked anything yet!
+        if (combined.contains("google.com/safesearch") ||
+            combined.contains("explicit results filter") ||
+            (combined.contains("bing.com/account") && (combined.contains("safesearch") || combined.contains("safe search"))) ||
+            (combined.contains("bing.com/preferences") && (combined.contains("safesearch") || combined.contains("safe search"))) ||
+            combined.contains("duckduckgo.com/settings") ||
+            combined.contains("search.yahoo.com/preferences")
+        ) {
+            return "SafeSearch Locked: SafeSearch settings page is blocked!"
         }
 
         // DNS Tamper Detection in Browser (Secure DNS / Custom DNS / Provider switches)
         if (combined.contains("use secure dns") ||
             combined.contains("choose another provider") ||
-            combined.contains("custom dns")
+            combined.contains("custom dns") ||
+            combined.contains("private dns") ||
+            combined.contains("dns provider hostname")
         ) {
             return "DNS Shield Lock: Secure DNS cannot be changed to bypass protection!"
         }
@@ -262,26 +732,27 @@ object AntiPornDefenderManager {
                       viewId.contains("query") ||
                       viewId.contains("title")
 
-        // Only inspect text if this node is an input field, address/URL bar, search bar, or page title!
-        // This ensures news articles, blogs, research, and Wikipedia pages are NEVER falsely blocked!
-        if (isInputOrUrl) {
-            val text = node.text?.toString() ?: ""
-            if (text.isNotBlank()) {
+        val text = node.text?.toString() ?: ""
+        if (text.isNotBlank()) {
+            if (isInputOrUrl || text.length <= 300) {
                 val trigger = detectAdultContent(text)
                 if (trigger != null) return trigger
             }
+        }
 
-            val desc = node.contentDescription?.toString() ?: ""
-            if (desc.isNotBlank()) {
+        val desc = node.contentDescription?.toString() ?: ""
+        if (desc.isNotBlank()) {
+            // Google Images thumbnail descriptions can be up to 500 characters long
+            if (isInputOrUrl || desc.length <= 500) {
                 val descTrigger = detectAdultContent(desc)
                 if (descTrigger != null) return descTrigger
             }
+        }
 
-            val hint = node.hintText?.toString() ?: ""
-            if (hint.isNotBlank()) {
-                val hintTrigger = detectAdultContent(hint)
-                if (hintTrigger != null) return hintTrigger
-            }
+        val hint = node.hintText?.toString() ?: ""
+        if (hint.isNotBlank()) {
+            val hintTrigger = detectAdultContent(hint)
+            if (hintTrigger != null) return hintTrigger
         }
 
         val childCount = node.childCount

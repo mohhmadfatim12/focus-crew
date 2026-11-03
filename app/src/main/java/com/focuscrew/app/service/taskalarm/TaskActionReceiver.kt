@@ -25,6 +25,9 @@ class TaskActionReceiver : BroadcastReceiver() {
                 val db = FocusDatabase.getInstance(context)
                 val repository = TaskAlarmRepository(db.taskAlarmDao(), context)
 
+                // Stop ringing immediately on any user action
+                AlarmSoundRinger.stop()
+
                 when (action) {
                     TaskAlarmNotificationService.ACTION_COMPLETE_TASK -> {
                         repository.setTaskCompleted(taskId, true)

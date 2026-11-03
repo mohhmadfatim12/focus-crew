@@ -139,7 +139,11 @@ class TaskAlarmRepository(
     private fun scheduleNotificationForTask(task: TaskAlarmEntity) {
         val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
         val formattedTime = timeFormat.format(Date(task.scheduledTimeMillis))
-        val body = "It's $formattedTime — time to do your ${task.title} task."
+        val body = if (task.description.isNotBlank()) {
+            task.description
+        } else {
+            "It's $formattedTime — time to do your ${task.title} task."
+        }
 
         TaskAlarmNotificationService.scheduleAlarm(
             context = context,

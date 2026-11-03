@@ -309,20 +309,30 @@ fun TitanAntiPornFortressCard() {
                                     color = AntiqueHoneyBrass
                                 )
                             }
-                            Button(
-                                onClick = {
-                                    try {
-                                        context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        })
-                                    } catch (_: Exception) {}
-                                },
-                                shape = RoundedCornerShape(6.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AntiqueHoneyBrass),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                modifier = Modifier.height(28.dp)
-                            ) {
-                                Text("Enable", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Button(
+                                    onClick = {
+                                        com.focuscrew.app.util.RestrictedSettingsHelper.openAccessibilitySettings(context)
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AntiqueHoneyBrass),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text("Enable", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            com.focuscrew.app.util.RestrictedSettingsHelper.openAppInfoForRestrictedSettings(context)
+                                        },
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Text("Unlock", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
                     }
@@ -724,7 +734,7 @@ private fun armAllDefenses(context: Context) {
 private fun disarmAllDefenses(context: Context) {
     FocusCrewVpnService.setVpnEnabled(false)
     AntiPornDefenderManager.setDefenderEnabled(false)
-    AntiPornDefenderManager.setSafeSearchEnforced(false)
+    AntiPornDefenderManager.setSafeSearchEnforced(true) // SafeSearch is permanently locked
     FreedomVaultManager.setBlockIncognito(false)
 }
 

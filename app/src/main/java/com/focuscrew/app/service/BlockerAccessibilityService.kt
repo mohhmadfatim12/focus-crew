@@ -15,6 +15,7 @@ class BlockerAccessibilityService : AccessibilityService() {
 
     private var lastBlockedPackage: String? = null
     private var lastBlockedTimestamp: Long = 0L
+    private var lastSafeSearchExitTimestamp: Long = 0L
 
     /**
      * Tracks the target reel app ONLY after a genuine reel scroll is detected.
@@ -27,8 +28,6 @@ class BlockerAccessibilityService : AccessibilityService() {
     private var currentForegroundPackage: String? = null
     private var foregroundAppStartTime: Long = 0L
 
-    /** Remembers active browser so Gboard/system keyboard typing is scanned */
-    private var activeBrowserPackage: String? = null
 
     /** Active reel session watch heartbeat tracking */
     private var activeReelApp: String? = null
@@ -129,8 +128,22 @@ class BlockerAccessibilityService : AccessibilityService() {
         AntiPornDefenderManager.setDefenderEnabled(true)
         AntiPornDefenderManager.setSafeSearchEnforced(true)
         FocusCrewVpnService.initialize(applicationContext)
+        FocusCrewVpnService.autoStartIfPermitted(applicationContext)
         ReelOverlayManager.destroy()
         ReelNotificationManager.createNotificationChannel(applicationContext)
+        com.focuscrew.app.util.UsageStatsHelper.syncExactTimesIfPermitted(applicationContext)
+    }
+
+    private fun flushForegroundTime(now: Long = System.currentTimeMillis()) {
+        val pkg = currentForegroundPackage
+        if (pkg != null && (pkg.contains("instagram") || pkg.contains("youtube")) && foregroundAppStartTime > 0L) {
+            val delta = now - foregroundAppStartTime
+            if (delta in 500L..(12 * 3600 * 1000L)) {
+                val targetPkg = if (pkg.contains("instagram")) "com.instagram.android" else "com.google.android.youtube"
+                ReelCounterManager.addTimeSpent(targetPkg, delta)
+            }
+        }
+        foregroundAppStartTime = now
     }
 
     private fun startWatchHeartbeat(pkg: String) {
@@ -155,6 +168,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
     private fun endReelSessionIfActive() {
+        flushForegroundTime()
         stopWatchHeartbeat()
         ReelCounterManager.endReelSession()
     }
@@ -300,38 +314,81 @@ class BlockerAccessibilityService : AccessibilityService() {
     }
 
         // ==========================================
-        // 2. Anti-Porn Defender: Browser Search & Site Interception
-        // STRICT RULE: ONLY runs when the user is ACTUALLY inside a supported web browser!
-        // Social media platforms, games, video editors, and messaging apps are 100% EXEMPT and NEVER blocked!
         // ==========================================
-        val isCurrentEventBrowser = AntiPornDefenderManager.isBrowserPackage(rawPackageName)
-        val isKeyboardEvent = rawPackageName == "com.google.android.inputmethod.latin" || rawPackageName.contains("inputmethod")
+        // 2. Layer 1: Anti-Porn Defender (Browser Search & URL Shield)
+        // STRICT RULE: ONLY runs when the user is ACTUALLY inside a supported web browser!
+        // All messaging apps, social platforms, games, and system tools are 100% EXEMPT and NEVER blocked!
+        // ==========================================
+        val activeBrowser = resolveActiveBrowserPackage(rawPackageName)
 
-        // If user is in ANY non-browser app (and not typing on keyboard), immediately clear activeBrowserPackage!
-        if (!isCurrentEventBrowser && !isKeyboardEvent && rawPackageName.isNotEmpty()) {
-            activeBrowserPackage = null
+        if (activeBrowser != null) {
+            FocusCrewVpnService.autoStartIfPermitted(applicationContext)
         }
 
-        if (isCurrentEventBrowser) {
-            currentForegroundPackage = rawPackageName
-            activeBrowserPackage = rawPackageName
-        }
+        // ── PROACTIVE SAFESEARCH FILTER LOCK & BLOCKER (NUCLEAR) ──
+        // This runs on EVERY event in a browser or search app to enforce FILTER mode!
+        if (activeBrowser != null && AntiPornDefenderManager.isSafeSearchEnforced.value) {
+            val browserRoot = getActiveBrowserRootNode()
 
-        // Strictly determine if the user is currently inside a browser
-        val effectiveBrowserPkg: String? = when {
-            isCurrentEventBrowser -> rawPackageName
-            isKeyboardEvent && activeBrowserPackage != null -> activeBrowserPackage
-            else -> null // Absolutely NEVER fallback to non-browser apps or background windows!
-        }
+            // 1. Intercept user actively tapping "Off" or "Blur" in SafeSearch
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+                if (AntiPornDefenderManager.isAttemptingToDisableSafeSearch(event, browserRoot)) {
+                    Log.d(TAG, "🔒 BLOCKED click on Off/Blur in SafeSearch! Enforcing FILTER!")
+                    AntiPornDefenderManager.enforceSafeSearchFilter(browserRoot)
+                    forceExitSafeSearchPage()
+                    return
+                }
+            }
 
-        val isStrictlyInBrowser = effectiveBrowserPkg != null && AntiPornDefenderManager.isBrowserPackage(effectiveBrowserPkg)
+            // 2. Continuously lock SafeSearch ON FILTER if settings UI is open
+            AntiPornDefenderManager.enforceSafeSearchFilter(browserRoot)
+
+            // 3. FAST CHECK: Scan event text directly for SafeSearch URLs
+            var fastSafeSearchDetected = false
+            val eventTextBuilder = StringBuilder()
+            for (t in event.text) {
+                eventTextBuilder.append(t?.toString()?.lowercase() ?: "").append(' ')
+            }
+            val evSourceText = event.source?.text?.toString()?.lowercase() ?: ""
+            eventTextBuilder.append(evSourceText).append(' ')
+            val evDesc = event.contentDescription?.toString()?.lowercase() ?: ""
+            eventTextBuilder.append(evDesc)
+            val fastEventText = eventTextBuilder.toString()
+
+            if (AntiPornDefenderManager.isNavigatingToSafeSearchSettings(fastEventText)) {
+                fastSafeSearchDetected = true
+            }
+
+            // 4. FAST CHECK: Full window hierarchy scan for SafeSearch settings page
+            if (!fastSafeSearchDetected) {
+                val safeSearchPageDetection = AntiPornDefenderManager.detectSafeSearchSettingsPage(browserRoot)
+                if (safeSearchPageDetection != null) {
+                    fastSafeSearchDetected = true
+                }
+            }
+
+            if (fastSafeSearchDetected) {
+                // Ensure Filter mode is locked BEFORE exiting!
+                AntiPornDefenderManager.enforceSafeSearchFilter(browserRoot)
+
+                val now = System.currentTimeMillis()
+                if (now - lastSafeSearchExitTimestamp > 300L) {
+                    lastSafeSearchExitTimestamp = now
+                    lastBlockedPackage = activeBrowser
+                    lastBlockedTimestamp = now
+                    Log.d(TAG, "🔒 NUCLEAR SafeSearch page block — forcing exit with FILTER locked")
+                    forceExitSafeSearchPage()
+                    return
+                }
+            }
+        }
 
         if (AntiPornDefenderManager.isDefenderEnabled.value &&
-            isStrictlyInBrowser &&
+            activeBrowser != null &&
             !isEssentialSafePackage(rawPackageName) &&
             rawPackageName != packageName
         ) {
-            val effectivePkg = effectiveBrowserPkg!!
+            val effectivePkg = activeBrowser
             var detectedTrigger: String? = null
 
             // 1. Immediate Event Text Check (catches text being typed, search queries, URL bar text)
@@ -365,22 +422,13 @@ class BlockerAccessibilityService : AccessibilityService() {
             }
 
             // 4. SafeSearch & DNS Tamper Prevention: If user tries to disable SafeSearch or change DNS
-            if (detectedTrigger == null && AntiPornDefenderManager.isSafeSearchEnforced.value) {
-                val combinedText = buildString {
-                    for (t in event.text) append(t?.toString()?.lowercase() ?: "").append(' ')
-                    append(event.contentDescription?.toString()?.lowercase() ?: "").append(' ')
-                    append(event.source?.text?.toString()?.lowercase() ?: "")
-                }
-                if (isSafeSearchTamper(combinedText)) {
-                    detectedTrigger = "SafeSearch Lock: SafeSearch is permanently locked on!"
-                } else if (isDnsTamperAttempt(combinedText)) {
-                    detectedTrigger = "DNS Shield Lock: Secure DNS cannot be changed to bypass protection!"
-                }
+            val browserRoot = getActiveBrowserRootNode()
+            if (detectedTrigger == null && AntiPornDefenderManager.isSafeSearchEnforced.value && browserRoot != null) {
+                detectedTrigger = AntiPornDefenderManager.detectSafeSearchTamper(event, browserRoot)
             }
 
-            // 5. Deep Window Hierarchy Check
-            if (detectedTrigger == null) {
-                val browserRoot = getActiveBrowserRootNode()
+            // 5. Deep Window Hierarchy Check on confirmed browser window
+            if (detectedTrigger == null && browserRoot != null) {
                 detectedTrigger = AntiPornDefenderManager.scanBrowserForAdultContent(browserRoot)
             }
 
@@ -409,19 +457,33 @@ class BlockerAccessibilityService : AccessibilityService() {
                     Log.d(TAG, "Anti-Porn Defender intercepted: $effectivePkg with trigger \"$detectedTrigger\"")
 
 
-                    val blockType = if (detectedTrigger.contains("SafeSearch")) {
-                        CalmBlockActivity.BLOCK_TYPE_SAFESEARCH
-                    } else {
-                        CalmBlockActivity.BLOCK_TYPE_ADULT_CONTENT
+                    val isSafeSearchOrDnsTamper = detectedTrigger.contains("SafeSearch", ignoreCase = true) ||
+                                                  detectedTrigger.contains("Safe Search", ignoreCase = true) ||
+                                                  detectedTrigger.contains("DNS", ignoreCase = true) ||
+                                                  detectedTrigger.contains("safe=off", ignoreCase = true) ||
+                                                  detectedTrigger.contains("safesearch=off", ignoreCase = true) ||
+                                                  detectedTrigger.contains("safesearch=0", ignoreCase = true) ||
+                                                  detectedTrigger.contains("adlt=off", ignoreCase = true) ||
+                                                  detectedTrigger.contains("kp=-2", ignoreCase = true) ||
+                                                  detectedTrigger.contains("preferences", ignoreCase = true) ||
+                                                  detectedTrigger.contains("Navigation", ignoreCase = true) ||
+                                                  detectedTrigger.contains("settings page", ignoreCase = true)
+
+                    if (isSafeSearchOrDnsTamper) {
+                        // NUCLEAR: Multi-step exit to guarantee the user cannot stay on the SafeSearch page!
+                        forceExitSafeSearchPage()
+                        return
                     }
 
+                    // For ADULT CONTENT / PORN searches or websites:
+                    // Show "You Are Searching the Wrong Thing!" CalmBlockActivity
                     val blockIntent = Intent(this, CalmBlockActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                         addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         putExtra(CalmBlockActivity.EXTRA_BLOCKED_PACKAGE, effectivePkg)
                         putExtra(CalmBlockActivity.EXTRA_BLOCKED_LABEL, detectedTrigger)
-                        putExtra(CalmBlockActivity.EXTRA_BLOCK_TYPE, blockType)
+                        putExtra(CalmBlockActivity.EXTRA_BLOCK_TYPE, CalmBlockActivity.BLOCK_TYPE_ADULT_CONTENT)
                     }
                     startActivity(blockIntent)
                     return
@@ -444,6 +506,7 @@ class BlockerAccessibilityService : AccessibilityService() {
 
             // When returning to FocusCrew, hide overlay and end reel session
             if (rawPackageName == packageName) {
+                flushForegroundTime(now)
                 endReelSessionIfActive()
                 currentForegroundPackage = null
                 foregroundAppStartTime = 0L
@@ -457,6 +520,7 @@ class BlockerAccessibilityService : AccessibilityService() {
             if (isTargetReelApp) {
                 val targetPkg = if (isInstagram) "com.instagram.android" else "com.google.android.youtube"
                 if (currentForegroundPackage != targetPkg) {
+                    flushForegroundTime(now)
                     endReelSessionIfActive()
                     currentForegroundPackage = targetPkg
                     foregroundAppStartTime = now
@@ -468,17 +532,11 @@ class BlockerAccessibilityService : AccessibilityService() {
                 }
             } else {
                 // Switched away to a different app
+                flushForegroundTime(now)
                 endReelSessionIfActive()
                 currentForegroundPackage = rawPackageName
                 foregroundAppStartTime = 0L
 
-                if (excludedSocialAndMessagingPackages.contains(rawPackageName)) {
-                    activeBrowserPackage = null
-                } else if (AntiPornDefenderManager.isBrowserPackage(rawPackageName)) {
-                    activeBrowserPackage = rawPackageName
-                } else if (!transientSystemPackages.contains(rawPackageName)) {
-                    activeBrowserPackage = null
-                }
 
                 if (isOverlayCurrentlyVisible) {
                     scheduleGracefulHideOverlay()
@@ -494,17 +552,41 @@ class BlockerAccessibilityService : AccessibilityService() {
                         append(event.contentDescription?.toString()?.lowercase() ?: "").append(' ')
                         append(event.source?.text?.toString()?.lowercase() ?: "")
                     }
+
+                    // CRITICAL FIX: NEVER block user on Accessibility, Permission, or Restricted Settings screens!
+                    val isSystemConfigurationScreen = combinedText.contains("accessibility") ||
+                        combinedText.contains("installed apps") ||
+                        combinedText.contains("downloaded apps") ||
+                        combinedText.contains("downloaded services") ||
+                        combinedText.contains("installed services") ||
+                        combinedText.contains("accessibility service") ||
+                        combinedText.contains("allow restricted") ||
+                        combinedText.contains("restricted settings") ||
+                        combinedText.contains("special app access") ||
+                        combinedText.contains("usage access") ||
+                        combinedText.contains("notification access") ||
+                        combinedText.contains("battery optimization") ||
+                        combinedText.contains("permission")
+
+                    if (isSystemConfigurationScreen) {
+                        return
+                    }
+
                     if (isDnsTamperAttempt(combinedText)) {
                         Log.d(TAG, "🔒 Intercepted Private DNS settings attempt in Android Settings")
                         performGlobalAction(GLOBAL_ACTION_BACK)
                         android.widget.Toast.makeText(applicationContext, "🔒 FocusCrew: Private DNS settings are protected by Focus Shield", android.widget.Toast.LENGTH_SHORT).show()
+                        return
                     }
 
-                    // Anti-Tamper: Protect FocusCrew from Force-Stop or Uninstall in Android Settings
-                    val isSessionActive = com.focuscrew.app.ui.timer.TimerManager.snapshot.value.remainingMs > 0 || FreedomVaultManager.isCurrentTimeInDangerZone()
-                    if (AppSecurityManager.isSettingsAntiTamperActive.value && isSessionActive) {
-                        if (combinedText.contains("focuscrew") || combinedText.contains("focus crew")) {
-                            Log.d(TAG, "🔒 Intercepted FocusCrew App Info attempt in Android Settings during active focus")
+                    // Anti-Tamper: Protect FocusCrew ONLY from explicit Force-Stop or Uninstall during an active timer session
+                    val isTimerActive = com.focuscrew.app.ui.timer.TimerManager.snapshot.value.remainingMs > 0
+                    if (AppSecurityManager.isSettingsAntiTamperActive.value && isTimerActive) {
+                        val isFocusCrewTarget = combinedText.contains("focuscrew") || combinedText.contains("focus crew")
+                        val isDestructiveAction = combinedText.contains("force stop") || combinedText.contains("uninstall") || combinedText.contains("disable")
+
+                        if (isFocusCrewTarget && isDestructiveAction) {
+                            Log.d(TAG, "🔒 Intercepted FocusCrew Force-Stop/Uninstall attempt in Android Settings during active focus")
                             performGlobalAction(GLOBAL_ACTION_BACK)
                             android.widget.Toast.makeText(
                                 applicationContext,
@@ -537,16 +619,64 @@ class BlockerAccessibilityService : AccessibilityService() {
                 }
                 Log.d(TAG, "Intercepting blocked app: $rawPackageName ($displayLabel)")
 
+                val blockType = if (isFreedomVaultCurfew && !isTimerBlocked) {
+                    CalmBlockActivity.BLOCK_TYPE_CURFEW
+                } else {
+                    CalmBlockActivity.BLOCK_TYPE_TIMER_APP
+                }
+
                 val blockIntent = Intent(this, CalmBlockActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     putExtra(CalmBlockActivity.EXTRA_BLOCKED_PACKAGE, rawPackageName)
                     putExtra(CalmBlockActivity.EXTRA_BLOCKED_LABEL, displayLabel)
+                    putExtra(CalmBlockActivity.EXTRA_BLOCK_TYPE, blockType)
                 }
                 startActivity(blockIntent)
             }
         }
+    }
+
+    /**
+     * NUCLEAR SafeSearch Page Exit — Guaranteed to remove the user from the SafeSearch settings page.
+     * Step 1: Press BACK immediately (exits the page in most cases)
+     * Step 2: Press BACK again after 200ms (catches single-page app scenarios where first BACK was absorbed)
+     * Step 3: Press HOME after 500ms if still in browser (absolute nuclear fallback — takes user to home screen)
+     * Step 4: Show Toast so user knows SafeSearch is locked
+     */
+    private fun forceExitSafeSearchPage() {
+        // Step 1: Immediate BACK press
+        performGlobalAction(GLOBAL_ACTION_BACK)
+
+        // Step 2: Second BACK press after 200ms
+        mainHandler.postDelayed({
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        }, 200L)
+
+        // Step 3: NUCLEAR FALLBACK — If still in browser after 500ms, press HOME
+        mainHandler.postDelayed({
+            val root = try { rootInActiveWindow } catch (_: Exception) { null }
+            val activePkg = root?.packageName?.toString() ?: ""
+            // If still inside a browser, the page might still be showing — go HOME!
+            if (AntiPornDefenderManager.isBrowserPackage(activePkg)) {
+                val browserRoot = getActiveBrowserRootNode()
+                val stillOnSafeSearchPage = AntiPornDefenderManager.detectSafeSearchSettingsPage(browserRoot)
+                if (stillOnSafeSearchPage != null) {
+                    Log.d(TAG, "🏠 NUCLEAR HOME — user still on SafeSearch page after double BACK, forcing HOME")
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                }
+            }
+        }, 500L)
+
+        // Step 4: Toast notification
+        try {
+            android.widget.Toast.makeText(
+                applicationContext,
+                "🔒 SafeSearch is permanently locked by FocusCrew",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        } catch (_: Exception) {}
     }
 
     private fun cancelPendingHideOverlay() {
@@ -621,31 +751,6 @@ class BlockerAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun isSafeSearchTamper(text: String): Boolean {
-        val lower = text.lowercase()
-        if (lower.contains("google.com/safesearch") ||
-            lower.contains("google.com/preferences") ||
-            lower.contains("safe=off") ||
-            lower.contains("safe=images") ||
-            lower.contains("safesearch=0") ||
-            lower.contains("safesearch=off") ||
-            lower.contains("adlt=off")
-        ) {
-            return true
-        }
-
-        // Only trigger on explicit intent to turn off SafeSearch, NEVER on Google's own "SafeSearch: Filter" or "Manage SafeSearch" labels!
-        if (lower.contains("turn off safesearch") ||
-            lower.contains("turn safesearch off") ||
-            lower.contains("disable safesearch") ||
-            lower.contains("disable safe search") ||
-            lower.contains("turn off safe search")
-        ) {
-            return true
-        }
-
-        return false
-    }
 
     private fun isDnsTamperAttempt(text: String): Boolean {
         val lower = text.lowercase()
@@ -662,40 +767,48 @@ class BlockerAccessibilityService : AccessibilityService() {
                lower.contains("adguard-dns")
     }
 
-    private fun findActiveBrowserFromWindows(): String? {
-        try {
-            val windowList = windows
-            if (!windowList.isNullOrEmpty()) {
-                for (w in windowList) {
-                    val root = w.root ?: continue
-                    val pkg = root.packageName?.toString() ?: ""
-                    if (AntiPornDefenderManager.isBrowserPackage(pkg)) {
-                        return pkg
-                    }
-                }
+    private fun resolveActiveBrowserPackage(eventPackage: String): String? {
+        // 1. If event is explicitly from a non-browser app, strictly reject
+        if (AntiPornDefenderManager.isNonBrowserApp(eventPackage)) {
+            return null
+        }
+
+        // 2. Check the active window currently on screen
+        val activeRoot = try { rootInActiveWindow } catch (_: Exception) { null }
+        val activeWindowPkg = activeRoot?.packageName?.toString() ?: ""
+
+        // If the active window on screen is a known non-browser app, strictly reject
+        if (AntiPornDefenderManager.isNonBrowserApp(activeWindowPkg)) {
+            return null
+        }
+
+        // 3. Direct browser or search app event when screen is in browser or neutral
+        if (AntiPornDefenderManager.isSearchOrBrowserApp(eventPackage)) {
+            if (activeWindowPkg.isEmpty() || AntiPornDefenderManager.isSearchOrBrowserApp(activeWindowPkg)) {
+                return eventPackage
             }
-        } catch (_: Exception) {}
+        }
+
+        // 4. Keyboard event: ONLY allowed if the active window on screen is a confirmed browser or search app!
+        val isKeyboard = eventPackage == "com.google.android.inputmethod.latin" || eventPackage.contains("inputmethod")
+        if (isKeyboard && AntiPornDefenderManager.isSearchOrBrowserApp(activeWindowPkg)) {
+            return activeWindowPkg
+        }
+
+        // 5. Active window itself is confirmed to be a browser or search app
+        if (AntiPornDefenderManager.isSearchOrBrowserApp(activeWindowPkg)) {
+            return activeWindowPkg
+        }
+
         return null
     }
 
     private fun getActiveBrowserRootNode(): AccessibilityNodeInfo? {
-        val root = try { rootInActiveWindow } catch (e: Exception) { null }
-        if (root != null && AntiPornDefenderManager.isBrowserPackage(root.packageName?.toString() ?: "")) {
+        val root = try { rootInActiveWindow } catch (_: Exception) { null }
+        if (root != null && AntiPornDefenderManager.isSearchOrBrowserApp(root.packageName?.toString() ?: "")) {
             return root
         }
-        try {
-            val windowList = windows
-            if (!windowList.isNullOrEmpty()) {
-                for (w in windowList) {
-                    val wRoot = w.root ?: continue
-                    val pkg = wRoot.packageName?.toString() ?: ""
-                    if (AntiPornDefenderManager.isBrowserPackage(pkg)) {
-                        return wRoot
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-        return root
+        return null
     }
 
     companion object {

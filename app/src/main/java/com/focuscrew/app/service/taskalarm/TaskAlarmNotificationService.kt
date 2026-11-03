@@ -22,9 +22,9 @@ import com.focuscrew.app.ui.MainActivity
 object TaskAlarmNotificationService {
 
     private const val TAG = "TaskAlarmNotifService"
-    const val CHANNEL_ID = "task_alarm_alerts_v2"
+    const val CHANNEL_ID = "task_alarm_alerts_v3"
     private const val CHANNEL_NAME = "Task & Routine Alarms"
-    private const val CHANNEL_DESC = "Rings and alerts for scheduled productivity tasks"
+    private const val CHANNEL_DESC = "Loud ringing alarms and alerts for scheduled tasks"
 
     const val ACTION_COMPLETE_TASK = "com.focuscrew.app.action.COMPLETE_TASK"
     const val ACTION_SNOOZE_TASK = "com.focuscrew.app.action.SNOOZE_TASK"
@@ -54,7 +54,7 @@ object TaskAlarmNotificationService {
                 description = CHANNEL_DESC
                 enableLights(true)
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 800)
+                vibrationPattern = longArrayOf(0, 800, 400, 800, 400, 1200)
                 setSound(soundUri, audioAttributes)
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
@@ -266,6 +266,7 @@ object TaskAlarmNotificationService {
     }
 
     fun dismissNotification(context: Context, id: String) {
+        AlarmSoundRinger.stop()
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         notificationManager?.cancel(id.hashCode())
     }

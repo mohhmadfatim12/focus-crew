@@ -175,4 +175,22 @@ class ReelStatsTest {
         val r200 = ReelStats(todayTotal = 200, dailyLimit = 50)
         org.junit.Assert.assertTrue(r200.isTranceBreakerDue)
     }
+
+    @Test
+    fun testFormatDurationPrecision() {
+        // Zero time
+        assertEquals("0s", ReelStats.formatDuration(0L))
+        assertEquals("0s", ReelStats.formatDuration(-100L))
+
+        // Seconds only
+        assertEquals("45s", ReelStats.formatDuration(45_000L))
+
+        // Minutes and seconds
+        assertEquals("2m 30s", ReelStats.formatDuration(150_000L))
+        assertEquals("5m", ReelStats.formatDuration(300_000L))
+
+        // Hours and minutes
+        assertEquals("1h 15m", ReelStats.formatDuration(4500_000L))
+        assertEquals("2h", ReelStats.formatDuration(7200_000L))
+    }
 }
