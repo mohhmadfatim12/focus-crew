@@ -297,7 +297,6 @@ class BlockerAccessibilityService : AccessibilityService() {
 
             val swiped = ReelCounterManager.recordSwipe(activePkg, event.fromIndex)
             if (swiped) {
-                sessionReelSwipeCount++
                 val stats = ReelCounterManager.stats.value
                 if (!isOverlayCurrentlyVisible && stats.isOverlayEnabled) {
                     ReelOverlayManager.show(this, stats)
