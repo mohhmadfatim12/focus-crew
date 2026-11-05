@@ -39,6 +39,26 @@ object BlockerManager {
     )
     val whitelistPackages: StateFlow<Set<String>> = _whitelistPackages.asStateFlow()
 
+    private val _isAlwaysOnBlockingEnabled = MutableStateFlow(true)
+    val isAlwaysOnBlockingEnabled: StateFlow<Boolean> = _isAlwaysOnBlockingEnabled.asStateFlow()
+
+    private var sharedPrefs: android.content.SharedPreferences? = null
+    private const val PREFS_NAME = "focuscrew_blocker_prefs"
+    private const val KEY_ALWAYS_ON_BLOCKING = "always_on_blocking_enabled"
+
+    fun initialize(context: android.content.Context) {
+        if (sharedPrefs == null) {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            sharedPrefs = prefs
+            _isAlwaysOnBlockingEnabled.value = prefs.getBoolean(KEY_ALWAYS_ON_BLOCKING, true)
+        }
+    }
+
+    fun setAlwaysOnBlocking(enabled: Boolean) {
+        _isAlwaysOnBlockingEnabled.value = enabled
+        sharedPrefs?.edit()?.putBoolean(KEY_ALWAYS_ON_BLOCKING, enabled)?.apply()
+    }
+
     fun setServiceConnected(connected: Boolean) {
         _isServiceConnected.value = connected
     }
@@ -82,7 +102,8 @@ object BlockerManager {
     }
 
     fun isPackageBlocked(packageName: String): Boolean {
-        if (!_isBlockingActive.value) return false
+        // Block if active timer session blocking is ON OR Always-On blocking is enabled!
+        if (!_isBlockingActive.value && !_isAlwaysOnBlockingEnabled.value) return false
         
         if (_isWhitelistMode.value) {
             // In Whitelist mode, block if NOT in whitelist

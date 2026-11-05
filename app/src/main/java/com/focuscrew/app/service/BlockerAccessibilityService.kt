@@ -23,6 +23,7 @@ class BlockerAccessibilityService : AccessibilityService() {
      */
     private var currentTargetReelApp: String? = null
     private var isOverlayCurrentlyVisible = false
+    private var sessionReelSwipeCount = 0
 
     /** Real-time foreground app time tracking for Instagram and YouTube */
     private var currentForegroundPackage: String? = null
@@ -120,6 +121,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d(TAG, "BlockerAccessibilityService connected")
+        BlockerManager.initialize(applicationContext)
         BlockerManager.setServiceConnected(true)
         BlockProfileManager.initialize(applicationContext)
         ReelCounterManager.initialize(applicationContext)
@@ -170,6 +172,7 @@ class BlockerAccessibilityService : AccessibilityService() {
     private fun endReelSessionIfActive() {
         flushForegroundTime()
         stopWatchHeartbeat()
+        sessionReelSwipeCount = 0
         ReelCounterManager.endReelSession()
     }
 
@@ -296,6 +299,7 @@ class BlockerAccessibilityService : AccessibilityService() {
 
             val swiped = ReelCounterManager.recordSwipe(activePkg, event.fromIndex)
             if (swiped) {
+                sessionReelSwipeCount++
                 val stats = ReelCounterManager.stats.value
                 if (!isOverlayCurrentlyVisible && stats.isOverlayEnabled) {
                     ReelOverlayManager.show(this, stats)
@@ -304,7 +308,22 @@ class BlockerAccessibilityService : AccessibilityService() {
                     ReelOverlayManager.update(stats)
                 }
                 ReelNotificationManager.updateNotification(applicationContext, stats)
-                Log.d(TAG, "Counted Reel swipe! Total today: ${stats.todayTotal} ($activePkg, class=$className)")
+                Log.d(TAG, "Counted Reel swipe! Total today: ${stats.todayTotal}, session: $sessionReelSwipeCount ($activePkg, class=$className)")
+
+                // AUTOMATIC DOPAMINE DETOX INTERVENTION:
+                // After 10 consecutive reel swipes, automatically kick user to home & launch TranceBreaker!
+                if (sessionReelSwipeCount >= 10 || (stats.todayTotal > 0 && stats.todayTotal % 15 == 0)) {
+                    sessionReelSwipeCount = 0
+                    Log.d(TAG, "⚡ Automatic TranceBreaker triggered after consecutive reels!")
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                    mainHandler.postDelayed({
+                        try {
+                            TranceBreakerActivity.launch(this@BlockerAccessibilityService, triggeredByMilestone = true)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error launching TranceBreakerActivity: ${e.message}")
+                        }
+                    }, 150L)
+                }
             }
 
             // Schedule auto-hide after 3.5s of no more reel scrolling
@@ -604,7 +623,7 @@ class BlockerAccessibilityService : AccessibilityService() {
             val isTimerBlocked = BlockerManager.isPackageBlocked(rawPackageName)
 
             if (isTimerBlocked || isFreedomVaultCurfew) {
-                if (rawPackageName == lastBlockedPackage && (now - lastBlockedTimestamp) < 1500L) {
+                if (rawPackageName == lastBlockedPackage && (now - lastBlockedTimestamp) < 600L) {
                     return
                 }
 
@@ -619,6 +638,9 @@ class BlockerAccessibilityService : AccessibilityService() {
                 }
                 Log.d(TAG, "Intercepting blocked app: $rawPackageName ($displayLabel)")
 
+                // 1. Immediately press HOME to drop the blocked app out of foreground
+                performGlobalAction(GLOBAL_ACTION_HOME)
+
                 val blockType = if (isFreedomVaultCurfew && !isTimerBlocked) {
                     CalmBlockActivity.BLOCK_TYPE_CURFEW
                 } else {
@@ -629,11 +651,32 @@ class BlockerAccessibilityService : AccessibilityService() {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                     putExtra(CalmBlockActivity.EXTRA_BLOCKED_PACKAGE, rawPackageName)
                     putExtra(CalmBlockActivity.EXTRA_BLOCKED_LABEL, displayLabel)
                     putExtra(CalmBlockActivity.EXTRA_BLOCK_TYPE, blockType)
                 }
-                startActivity(blockIntent)
+
+                val options = if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    try {
+                        val method = android.app.ActivityOptions::class.java.getMethod("makeBasic")
+                        val basic = method.invoke(null) as android.app.ActivityOptions
+                        val setPendingMode = android.app.ActivityOptions::class.java.getMethod(
+                            "setPendingIntentBackgroundActivityStartMode",
+                            Int::class.javaPrimitiveType
+                        )
+                        setPendingMode.invoke(basic, 1)
+                        basic.toBundle()
+                    } catch (_: Exception) { null }
+                } else null
+
+                mainHandler.postDelayed({
+                    try {
+                        startActivity(blockIntent, options)
+                    } catch (_: Exception) {
+                        try { startActivity(blockIntent) } catch (_: Exception) {}
+                    }
+                }, 100L)
             }
         }
     }

@@ -116,6 +116,7 @@ fun AppPickerScreen(
 
     // Load installed launchable apps asynchronously on entry
     LaunchedEffect(Unit) {
+        BlockerManager.initialize(context)
         val useCase = GetInstalledAppsUseCase(context)
         installedApps = useCase.execute()
         isLoading = false
@@ -210,6 +211,67 @@ fun AppPickerScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
+        // 0. ALWAYS-ON APP BLOCKER (Clean, Minimalist Bar)
+        val isAlwaysOnBlocking by BlockerManager.isAlwaysOnBlockingEnabled.collectAsState()
+
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (isAlwaysOnBlocking) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            },
+            border = BorderStroke(
+                1.dp,
+                if (isAlwaysOnBlocking) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clickable {
+                    BlockerManager.setAlwaysOnBlocking(!isAlwaysOnBlocking)
+                }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = if (isAlwaysOnBlocking) "🔒" else "⚪",
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "App Blocker (Always Active)",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                }
+
+                Switch(
+                    checked = isAlwaysOnBlocking,
+                    onCheckedChange = { newState ->
+                        BlockerManager.setAlwaysOnBlocking(newState)
+                    },
+                    modifier = Modifier.scale(0.8f),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         // 1. DOPAMINE DETOX BLOCKER (Clean, Minimalist Bar)
