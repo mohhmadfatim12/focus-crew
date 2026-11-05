@@ -23,7 +23,6 @@ class BlockerAccessibilityService : AccessibilityService() {
      */
     private var currentTargetReelApp: String? = null
     private var isOverlayCurrentlyVisible = false
-    private var sessionReelSwipeCount = 0
 
     /** Real-time foreground app time tracking for Instagram and YouTube */
     private var currentForegroundPackage: String? = null
@@ -172,7 +171,6 @@ class BlockerAccessibilityService : AccessibilityService() {
     private fun endReelSessionIfActive() {
         flushForegroundTime()
         stopWatchHeartbeat()
-        sessionReelSwipeCount = 0
         ReelCounterManager.endReelSession()
     }
 
@@ -308,22 +306,7 @@ class BlockerAccessibilityService : AccessibilityService() {
                     ReelOverlayManager.update(stats)
                 }
                 ReelNotificationManager.updateNotification(applicationContext, stats)
-                Log.d(TAG, "Counted Reel swipe! Total today: ${stats.todayTotal}, session: $sessionReelSwipeCount ($activePkg, class=$className)")
-
-                // AUTOMATIC DOPAMINE DETOX INTERVENTION:
-                // After 10 consecutive reel swipes, automatically kick user to home & launch TranceBreaker!
-                if (sessionReelSwipeCount >= 10 || (stats.todayTotal > 0 && stats.todayTotal % 15 == 0)) {
-                    sessionReelSwipeCount = 0
-                    Log.d(TAG, "⚡ Automatic TranceBreaker triggered after consecutive reels!")
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                    mainHandler.postDelayed({
-                        try {
-                            TranceBreakerActivity.launch(this@BlockerAccessibilityService, triggeredByMilestone = true)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Error launching TranceBreakerActivity: ${e.message}")
-                        }
-                    }, 150L)
-                }
+                Log.d(TAG, "Counted Reel swipe! Total today: ${stats.todayTotal} ($activePkg, class=$className)")
             }
 
             // Schedule auto-hide after 3.5s of no more reel scrolling
