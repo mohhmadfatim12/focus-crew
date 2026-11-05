@@ -39,7 +39,7 @@ object BlockerManager {
     )
     val whitelistPackages: StateFlow<Set<String>> = _whitelistPackages.asStateFlow()
 
-    private val _isAlwaysOnBlockingEnabled = MutableStateFlow(true)
+    private val _isAlwaysOnBlockingEnabled = MutableStateFlow(false)
     val isAlwaysOnBlockingEnabled: StateFlow<Boolean> = _isAlwaysOnBlockingEnabled.asStateFlow()
 
     private var sharedPrefs: android.content.SharedPreferences? = null
@@ -50,7 +50,7 @@ object BlockerManager {
         if (sharedPrefs == null) {
             val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
             sharedPrefs = prefs
-            _isAlwaysOnBlockingEnabled.value = prefs.getBoolean(KEY_ALWAYS_ON_BLOCKING, true)
+            _isAlwaysOnBlockingEnabled.value = prefs.getBoolean(KEY_ALWAYS_ON_BLOCKING, false)
         }
     }
 
@@ -102,8 +102,9 @@ object BlockerManager {
     }
 
     fun isPackageBlocked(packageName: String): Boolean {
-        // Block if active timer session blocking is ON OR Always-On blocking is enabled!
-        if (!_isBlockingActive.value && !_isAlwaysOnBlockingEnabled.value) return false
+        // STRICT USER MANDATE: ONLY block apps while a focus timer session is actively running!
+        // As soon as the timer ends, cancelled, or completed, apps are IMMEDIATELY unblocked!
+        if (!_isBlockingActive.value) return false
         
         if (_isWhitelistMode.value) {
             // In Whitelist mode, block if NOT in whitelist

@@ -211,68 +211,38 @@ fun AppPickerScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // 0. ALWAYS-ON APP BLOCKER (Clean, Minimalist Bar)
-        val isAlwaysOnBlocking by BlockerManager.isAlwaysOnBlockingEnabled.collectAsState()
-
+        // 0. TIMER SESSION STATUS BANNER
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (isAlwaysOnBlocking) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            },
+            shape = RoundedCornerShape(10.dp),
+            color = if (isTimerActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             border = BorderStroke(
                 1.dp,
-                if (isAlwaysOnBlocking) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                if (isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
-                .clickable {
-                    BlockerManager.setAlwaysOnBlocking(!isAlwaysOnBlocking)
-                }
+                .padding(vertical = 4.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = if (isAlwaysOnBlocking) "🔒" else "⚪",
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "App Blocker (Always Active)",
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1
-                    )
-                }
-
-                Switch(
-                    checked = isAlwaysOnBlocking,
-                    onCheckedChange = { newState ->
-                        BlockerManager.setAlwaysOnBlocking(newState)
-                    },
-                    modifier = Modifier.scale(0.8f),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary
-                    )
+                Text(if (isTimerActive) "⏱️" else "ℹ️", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isTimerActive) "Focus Timer Running — Selected apps are locked."
+                           else "Apps are blocked ONLY during an active Focus Timer session.",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isTimerActive) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // 1. DOPAMINE DETOX BLOCKER (Clean, Minimalist Bar)
             val toggleDopamineDetox: (Boolean) -> Unit = { newState ->
