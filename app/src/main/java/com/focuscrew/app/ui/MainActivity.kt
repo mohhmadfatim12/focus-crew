@@ -235,6 +235,7 @@ private fun MainContent(
     }
 
     LaunchedEffect(Unit) {
+        BlockerManager.initialize(context)
         BlockProfileManager.initialize(context)
         ReelCounterManager.initialize(context)
         FreedomVaultManager.initialize(context)

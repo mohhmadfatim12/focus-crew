@@ -102,9 +102,8 @@ object BlockerManager {
     }
 
     fun isPackageBlocked(packageName: String): Boolean {
-        // STRICT USER MANDATE: ONLY block apps while a focus timer session is actively running!
-        // As soon as the timer ends, cancelled, or completed, apps are IMMEDIATELY unblocked!
-        if (!_isBlockingActive.value) return false
+        // Block if an active focus timer session is running OR 24/7 Always-On Shield is enabled!
+        if (!_isBlockingActive.value && !_isAlwaysOnBlockingEnabled.value) return false
         
         if (_isWhitelistMode.value) {
             // In Whitelist mode, block if NOT in whitelist

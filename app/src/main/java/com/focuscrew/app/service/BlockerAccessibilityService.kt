@@ -1,13 +1,17 @@
 package com.focuscrew.app.service
 
 import android.accessibilityservice.AccessibilityService
+import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Toast
 import com.focuscrew.app.ui.blocker.CalmBlockActivity
 import com.focuscrew.app.ui.reel.TranceBreakerActivity
 
@@ -177,6 +181,30 @@ class BlockerAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val rawPackageName = event.packageName?.toString() ?: ""
+
+        // Keep currentForegroundPackage updated for non-transient packages
+        if (rawPackageName.isNotEmpty() && !transientSystemPackages.contains(rawPackageName)) {
+            currentForegroundPackage = rawPackageName
+        }
+
+        // ==========================================
+        // 0. High-Priority Universal App Blocker Check
+        // Intercepts blocked apps on any event (window change, scroll, click, content change)
+        // ==========================================
+        val effectiveAppPkg = if (rawPackageName.isNotEmpty() && !transientSystemPackages.contains(rawPackageName)) {
+            rawPackageName
+        } else {
+            currentForegroundPackage ?: ""
+        }
+
+        if (effectiveAppPkg.isNotEmpty() && !isEssentialSafePackage(effectiveAppPkg) && effectiveAppPkg != packageName) {
+            val isCurfew = FreedomVaultManager.shouldInterceptPackage(effectiveAppPkg)
+            val isTimerBlocked = BlockerManager.isPackageBlocked(effectiveAppPkg)
+            if (isCurfew || isTimerBlocked) {
+                enforceAppBlock(effectiveAppPkg, isCurfew, isTimerBlocked)
+                return
+            }
+        }
 
         val isInstagram = rawPackageName.contains("instagram")
         val isYoutube = rawPackageName == "com.google.android.youtube" || rawPackageName.contains("youtube")
@@ -476,17 +504,9 @@ class BlockerAccessibilityService : AccessibilityService() {
                         return
                     }
 
-                    // For ADULT CONTENT / PORN searches or websites:
-                    // Show "You Are Searching the Wrong Thing!" CalmBlockActivity
-                    val blockIntent = Intent(this, CalmBlockActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        putExtra(CalmBlockActivity.EXTRA_BLOCKED_PACKAGE, effectivePkg)
-                        putExtra(CalmBlockActivity.EXTRA_BLOCKED_LABEL, detectedTrigger)
-                        putExtra(CalmBlockActivity.EXTRA_BLOCK_TYPE, CalmBlockActivity.BLOCK_TYPE_ADULT_CONTENT)
-                    }
-                    startActivity(blockIntent)
+                    // Strict practical block: double BACK, clear text, HOME fallback, toast
+                    // Absolutely NO preachy "You Are Searching the Wrong Thing" popup screen!
+                    hardBlockAdultContent(effectivePkg)
                     return
                 }
             }
@@ -605,61 +625,136 @@ class BlockerAccessibilityService : AccessibilityService() {
             val isTimerBlocked = BlockerManager.isPackageBlocked(rawPackageName)
 
             if (isTimerBlocked || isFreedomVaultCurfew) {
-                if (rawPackageName == lastBlockedPackage && (now - lastBlockedTimestamp) < 600L) {
-                    return
-                }
-
-                lastBlockedPackage = rawPackageName
-                lastBlockedTimestamp = now
-
-                val appLabel = getAppLabel(rawPackageName)
-                val displayLabel = if (isFreedomVaultCurfew && !isTimerBlocked) {
-                    "$appLabel (Danger Zone Curfew)"
-                } else {
-                    appLabel
-                }
-                Log.d(TAG, "Intercepting blocked app: $rawPackageName ($displayLabel)")
-
-                // 1. Immediately press HOME to drop the blocked app out of foreground
-                performGlobalAction(GLOBAL_ACTION_HOME)
-
-                val blockType = if (isFreedomVaultCurfew && !isTimerBlocked) {
-                    CalmBlockActivity.BLOCK_TYPE_CURFEW
-                } else {
-                    CalmBlockActivity.BLOCK_TYPE_TIMER_APP
-                }
-
-                val blockIntent = Intent(this, CalmBlockActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                    putExtra(CalmBlockActivity.EXTRA_BLOCKED_PACKAGE, rawPackageName)
-                    putExtra(CalmBlockActivity.EXTRA_BLOCKED_LABEL, displayLabel)
-                    putExtra(CalmBlockActivity.EXTRA_BLOCK_TYPE, blockType)
-                }
-
-                val options = if (android.os.Build.VERSION.SDK_INT >= 34) {
-                    try {
-                        val method = android.app.ActivityOptions::class.java.getMethod("makeBasic")
-                        val basic = method.invoke(null) as android.app.ActivityOptions
-                        val setPendingMode = android.app.ActivityOptions::class.java.getMethod(
-                            "setPendingIntentBackgroundActivityStartMode",
-                            Int::class.javaPrimitiveType
-                        )
-                        setPendingMode.invoke(basic, 1)
-                        basic.toBundle()
-                    } catch (_: Exception) { null }
-                } else null
-
-                mainHandler.postDelayed({
-                    try {
-                        startActivity(blockIntent, options)
-                    } catch (_: Exception) {
-                        try { startActivity(blockIntent) } catch (_: Exception) {}
-                    }
-                }, 100L)
+                enforceAppBlock(rawPackageName, isFreedomVaultCurfew, isTimerBlocked)
+                return
             }
+        }
+    }
+
+    /**
+     * Strict Practical Adult Content Blocker.
+     * Instantly exits explicit searches, clears search bar, and forces back/home.
+     * Never shows any preachy popup screens!
+     */
+    private fun hardBlockAdultContent(browserPackage: String) {
+        // Step 1: Immediate BACK press to cancel/exit the explicit search query or page navigation
+        performGlobalAction(GLOBAL_ACTION_BACK)
+
+        // Step 2: Try to clear or replace text in the browser search bar node
+        try {
+            val browserRoot = getActiveBrowserRootNode()
+            if (browserRoot != null) {
+                val urlBarNodes = browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/url_bar")
+                    ?: browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/search_box_text")
+                urlBarNodes?.firstOrNull()?.let { node ->
+                    val arguments = android.os.Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+                    }
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Step 3: Second BACK press after 180ms to ensure the tab/page is exited
+        mainHandler.postDelayed({
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        }, 180L)
+
+        // Step 4: Strict Nuclear Fallback — If still showing explicit content in the browser after 450ms, go HOME
+        mainHandler.postDelayed({
+            val root = try { rootInActiveWindow } catch (_: Exception) { null }
+            val activePkg = root?.packageName?.toString() ?: ""
+            if (AntiPornDefenderManager.isBrowserPackage(activePkg)) {
+                val stillDetected = AntiPornDefenderManager.scanBrowserForAdultContent(root)
+                if (stillDetected != null) {
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                }
+            }
+        }, 450L)
+
+        // Step 5: Clean toast notification
+        try {
+            Toast.makeText(
+                applicationContext,
+                "🔒 FocusCrew Shield: Explicit search blocked & SafeSearch locked",
+                Toast.LENGTH_SHORT
+            ).show()
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Reliable App Blocker Enforcement for Android 14/15.
+     * Directly launches CalmBlockActivity via PendingIntent with foreground privilege,
+     * with fallback to direct startActivity and HOME.
+     */
+    private fun enforceAppBlock(pkg: String, isCurfew: Boolean, isTimerBlocked: Boolean) {
+        val now = System.currentTimeMillis()
+        if (pkg == lastBlockedPackage && (now - lastBlockedTimestamp) < 600L) {
+            return
+        }
+        lastBlockedPackage = pkg
+        lastBlockedTimestamp = now
+
+        val appLabel = getAppLabel(pkg)
+        val displayLabel = if (isCurfew && !isTimerBlocked) {
+            "$appLabel (Danger Zone Curfew)"
+        } else {
+            appLabel
+        }
+        Log.d(TAG, "Intercepting blocked app: $pkg ($displayLabel)")
+
+        val blockType = if (isCurfew && !isTimerBlocked) {
+            CalmBlockActivity.BLOCK_TYPE_CURFEW
+        } else {
+            CalmBlockActivity.BLOCK_TYPE_TIMER_APP
+        }
+
+        val blockIntent = Intent(this, CalmBlockActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(CalmBlockActivity.EXTRA_BLOCKED_PACKAGE, pkg)
+            putExtra(CalmBlockActivity.EXTRA_BLOCKED_LABEL, displayLabel)
+            putExtra(CalmBlockActivity.EXTRA_BLOCK_TYPE, blockType)
+        }
+
+        val optionsBundle = if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                val method = ActivityOptions::class.java.getMethod("makeBasic")
+                val basic = method.invoke(null) as ActivityOptions
+                val setPendingMode = ActivityOptions::class.java.getMethod(
+                    "setPendingIntentBackgroundActivityStartMode",
+                    Int::class.javaPrimitiveType
+                )
+                setPendingMode.invoke(basic, 1) // MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                basic.toBundle()
+            } catch (_: Exception) { null }
+        } else null
+
+        var launched = false
+        try {
+            val pending = PendingIntent.getActivity(
+                this,
+                pkg.hashCode(),
+                blockIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                optionsBundle
+            )
+            pending.send()
+            launched = true
+        } catch (_: Exception) {}
+
+        if (!launched) {
+            try {
+                startActivity(blockIntent, optionsBundle)
+                launched = true
+            } catch (_: Exception) {
+                try { startActivity(blockIntent); launched = true } catch (_: Exception) {}
+            }
+        }
+
+        if (!launched) {
+            performGlobalAction(GLOBAL_ACTION_HOME)
         }
     }
 

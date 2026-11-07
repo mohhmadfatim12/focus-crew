@@ -77,6 +77,7 @@ fun AppPickerScreen(
     val context = LocalContext.current
     val blockedPackages by BlockerManager.blockedPackages.collectAsState()
     val isDopamineDetoxEnabled by AntiPornDefenderManager.isDefenderEnabled.collectAsState()
+    val isAlwaysOnBlocking by BlockerManager.isAlwaysOnBlockingEnabled.collectAsState()
 
     val timerSnapshot by TimerManager.snapshot.collectAsState()
     val isTimerActive = timerSnapshot.status is TimerStatus.Running ||
@@ -323,9 +324,78 @@ fun AppPickerScreen(
                 }
             }
 
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // 2. APP BLOCKER MODE (Always-On 24/7 Shield vs Timer-Only)
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (isAlwaysOnBlocking) {
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            },
+            border = BorderStroke(
+                1.dp,
+                if (isAlwaysOnBlocking) MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clickable {
+                    BlockerManager.setAlwaysOnBlocking(!isAlwaysOnBlocking)
+                }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = if (isAlwaysOnBlocking) "⚡" else "⏱️",
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = if (isAlwaysOnBlocking) "24/7 Always-On Shield" else "Timer-Only Blocking",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = if (isAlwaysOnBlocking) "Blocked apps restricted continuously" else "Blocked apps restricted only during timer sessions",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Switch(
+                    checked = isAlwaysOnBlocking,
+                    onCheckedChange = { newState ->
+                        BlockerManager.setAlwaysOnBlocking(newState)
+                    },
+                    modifier = Modifier.scale(0.8f),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onSecondary,
+                        checkedTrackColor = MaterialTheme.colorScheme.secondary
+                    )
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 2. FULL-WIDTH CLEAN SEARCH BAR (Zero clutter, zero duplicate counters)
+        // 3. FULL-WIDTH CLEAN SEARCH BAR (Zero clutter, zero duplicate counters)
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
