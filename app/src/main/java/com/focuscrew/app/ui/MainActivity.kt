@@ -11,7 +11,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.res.painterResource
+import com.focuscrew.app.R
+import com.focuscrew.app.domain.model.TimerStatus
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -205,6 +211,10 @@ private fun MainContent(
     val repository = remember { FocusRepository(database) }
     val taskAlarmRepository = remember { TaskAlarmRepository(database.taskAlarmDao(), context.applicationContext) }
     val isServiceConnected by BlockerManager.isServiceConnected.collectAsState()
+    val blockedPackages by BlockerManager.blockedPackages.collectAsState()
+    val isAlwaysOnBlocking by BlockerManager.isAlwaysOnBlockingEnabled.collectAsState()
+    val timerSnapshot by TimerManager.snapshot.collectAsState()
+    val isTimerRunning = timerSnapshot.status is TimerStatus.Running
     val reelStats by ReelCounterManager.stats.collectAsState()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -315,244 +325,372 @@ private fun MainContent(
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerTonalElevation = 2.dp,
-                modifier = Modifier.width(300.dp)
+                modifier = Modifier.width(320.dp)
             ) {
-                // Side Menu Header
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("🛡️", fontSize = 22.sp)
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "FocusCrew",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Calm focus & anti-doomscroll",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Menu Item: Focus Timer
-                NavigationDrawerItem(
-                    label = { Text("Focus Timer", fontWeight = FontWeight.SemiBold) },
-                    icon = { Text("⏱️", fontSize = 18.sp) },
-                    selected = currentScreen == AppScreen.TIMER,
-                    onClick = {
-                        currentScreen = AppScreen.TIMER
-                        onScreenChange(AppScreen.TIMER)
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                )
-
-                // Menu Item: Task Alarm (User requested: TaskAlarm feature in FocusCrew)
-                NavigationDrawerItem(
-                    label = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Task Alarm", fontWeight = FontWeight.SemiBold)
-                            Box(
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape)
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    // 1. BRAND HEADER WITH LOGO & STATUS
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            .padding(horizontal = 20.dp, vertical = 20.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xFF16171D),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                                modifier = Modifier.size(48.dp)
                             ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.app_logo),
+                                    contentDescription = "FocusCrew Logo",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(6.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "FocusCrew",
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 20.sp
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = "PRO",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                                 Text(
-                                    text = "⏰ Alarms",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    text = "Calm Focus & Habit Shield",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                    },
-                    icon = { Text("⏰", fontSize = 18.sp) },
-                    selected = currentScreen == AppScreen.TASK_ALARM,
-                    onClick = {
-                        currentScreen = AppScreen.TASK_ALARM
-                        onScreenChange(AppScreen.TASK_ALARM)
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                )
 
-                // Menu Item: Reel Counter (Requested by user)
-                NavigationDrawerItem(
-                    label = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Live Status Pill
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = when {
+                                !isServiceConnected -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+                                isTimerRunning -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                isAlwaysOnBlocking -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                            },
+                            border = BorderStroke(
+                                1.dp,
+                                when {
+                                    !isServiceConnected -> MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+                                    isTimerRunning -> MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                    isAlwaysOnBlocking -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
+                                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                }
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Reel Counter", fontWeight = FontWeight.SemiBold)
-                            Box(
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape)
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = when {
+                                        !isServiceConnected -> "⚠️ Accessibility Off"
+                                        isTimerRunning -> "⚡ Focus Session Running"
+                                        isAlwaysOnBlocking -> "🛡️ 24/7 Shield Active"
+                                        else -> "🟢 Shield Standing By"
+                                    },
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = when {
+                                        !isServiceConnected -> MaterialTheme.colorScheme.error
+                                        isTimerRunning -> MaterialTheme.colorScheme.primary
+                                        isAlwaysOnBlocking -> MaterialTheme.colorScheme.secondary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // SECTION 1: CORE TOOLS
+                    Text(
+                        text = "CORE TOOLS",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            fontSize = 10.5.sp
+                        ),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                        modifier = Modifier.padding(start = 24.dp, top = 10.dp, bottom = 4.dp)
+                    )
+
+                    // Focus Timer
+                    NavigationDrawerItem(
+                        label = { Text("Focus Timer", fontWeight = FontWeight.SemiBold) },
+                        icon = { Text("⏱️", fontSize = 18.sp) },
+                        badge = if (isTimerRunning) {
+                            {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                ) {
+                                    Text(
+                                        text = "LIVE",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        } else null,
+                        selected = currentScreen == AppScreen.TIMER,
+                        onClick = {
+                            currentScreen = AppScreen.TIMER
+                            onScreenChange(AppScreen.TIMER)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    )
+
+                    // App Blocker
+                    NavigationDrawerItem(
+                        label = { Text("App Blocker", fontWeight = FontWeight.SemiBold) },
+                        icon = { Text("🛡️", fontSize = 18.sp) },
+                        badge = {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isAlwaysOnBlocking) MaterialTheme.colorScheme.secondaryContainer
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = if (isAlwaysOnBlocking) "24/7" else "${blockedPackages.size}",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isAlwaysOnBlocking) MaterialTheme.colorScheme.onSecondaryContainer
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
+                        },
+                        selected = currentScreen == AppScreen.APP_PICKER,
+                        onClick = {
+                            currentScreen = AppScreen.APP_PICKER
+                            onScreenChange(AppScreen.APP_PICKER)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    )
+
+                    // Task Alarm (Clean, no redundant badge)
+                    NavigationDrawerItem(
+                        label = { Text("Task Alarm", fontWeight = FontWeight.SemiBold) },
+                        icon = { Text("⏰", fontSize = 18.sp) },
+                        selected = currentScreen == AppScreen.TASK_ALARM,
+                        onClick = {
+                            currentScreen = AppScreen.TASK_ALARM
+                            onScreenChange(AppScreen.TASK_ALARM)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                    )
+
+                    // SECTION 2: MINDFULNESS & DETOX
+                    Text(
+                        text = "MINDFULNESS & DETOX",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            fontSize = 10.5.sp
+                        ),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                        modifier = Modifier.padding(start = 24.dp, top = 12.dp, bottom = 4.dp)
+                    )
+
+                    // Reel Counter (Proper badge parameter, never squished!)
+                    NavigationDrawerItem(
+                        label = { Text("Reel Counter", fontWeight = FontWeight.SemiBold) },
+                        icon = { Text("📱", fontSize = 18.sp) },
+                        badge = {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (reelStats.todayTotal > 50) MaterialTheme.colorScheme.errorContainer
+                                        else MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Text(
                                     text = "${reelStats.todayTotal}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = if (reelStats.todayTotal > 50) MaterialTheme.colorScheme.onErrorContainer
+                                            else MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
-                        }
-                    },
-                    icon = { Text("📱", fontSize = 18.sp) },
-                    selected = currentScreen == AppScreen.REEL_COUNTER,
-                    onClick = {
-                        currentScreen = AppScreen.REEL_COUNTER
-                        onScreenChange(AppScreen.REEL_COUNTER)
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        },
+                        selected = currentScreen == AppScreen.REEL_COUNTER,
+                        onClick = {
+                            currentScreen = AppScreen.REEL_COUNTER
+                            onScreenChange(AppScreen.REEL_COUNTER)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
                     )
-                )
 
-                // Menu Item: App Blocker
-                NavigationDrawerItem(
-                    label = { Text("App Blocker", fontWeight = FontWeight.SemiBold) },
-                    icon = { Text("🛡️", fontSize = 18.sp) },
-                    selected = currentScreen == AppScreen.APP_PICKER,
-                    onClick = {
-                        currentScreen = AppScreen.APP_PICKER
-                        onScreenChange(AppScreen.APP_PICKER)
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                )
-
-                // Menu Item: History & Streaks
-                NavigationDrawerItem(
-                    label = { Text("Stats & Streaks", fontWeight = FontWeight.SemiBold) },
-                    icon = { Text("📊", fontSize = 18.sp) },
-                    selected = currentScreen == AppScreen.HISTORY,
-                    onClick = {
-                        currentScreen = AppScreen.HISTORY
-                        onScreenChange(AppScreen.HISTORY)
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                )
-
-                // Menu Item: App Settings
-                NavigationDrawerItem(
-                    label = { Text("App Settings", fontWeight = FontWeight.SemiBold) },
-                    icon = { Text("⚙️", fontSize = 18.sp) },
-                    selected = currentScreen == AppScreen.SETTINGS,
-                    onClick = {
-                        currentScreen = AppScreen.SETTINGS
-                        onScreenChange(AppScreen.SETTINGS)
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                )
-
-                // Menu Item: Freedom Vault (Private & Isolated Recovery Section)
-                NavigationDrawerItem(
-                    label = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Freedom Vault", fontWeight = FontWeight.Bold)
-                            Box(
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape)
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    // Freedom Vault (Proper badge parameter)
+                    NavigationDrawerItem(
+                        label = { Text("Freedom Vault", fontWeight = FontWeight.SemiBold) },
+                        icon = { Text("🔒", fontSize = 18.sp) },
+                        badge = {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
                             ) {
                                 Text(
-                                    text = "🔒 Private",
+                                    text = "Private",
                                     fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                 )
                             }
-                        }
-                    },
-                    icon = { Text("🛡️", fontSize = 18.sp) },
-                    selected = currentScreen == AppScreen.FREEDOM_VAULT,
-                    onClick = {
-                        currentScreen = AppScreen.FREEDOM_VAULT
-                        onScreenChange(AppScreen.FREEDOM_VAULT)
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        },
+                        selected = currentScreen == AppScreen.FREEDOM_VAULT,
+                        onClick = {
+                            currentScreen = AppScreen.FREEDOM_VAULT
+                            onScreenChange(AppScreen.FREEDOM_VAULT)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
                     )
-                )
 
+                    Spacer(modifier = Modifier.height(6.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                    )
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Drawer Footer
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
-                ) {
+                    // SECTION 3: INSIGHTS & SETTINGS
                     Text(
-                        text = "FocusCrew v1.0 • 100% Offline",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        text = "INSIGHTS & SETTINGS",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            fontSize = 10.5.sp
+                        ),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                        modifier = Modifier.padding(start = 24.dp, top = 12.dp, bottom = 4.dp)
                     )
+
+                    // Stats & Streaks
+                    NavigationDrawerItem(
+                        label = { Text("Stats & Streaks", fontWeight = FontWeight.SemiBold) },
+                        icon = { Text("📊", fontSize = 18.sp) },
+                        selected = currentScreen == AppScreen.HISTORY,
+                        onClick = {
+                            currentScreen = AppScreen.HISTORY
+                            onScreenChange(AppScreen.HISTORY)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    )
+
+                    // App Settings
+                    NavigationDrawerItem(
+                        label = { Text("App Settings", fontWeight = FontWeight.SemiBold) },
+                        icon = { Text("⚙️", fontSize = 18.sp) },
+                        selected = currentScreen == AppScreen.SETTINGS,
+                        onClick = {
+                            currentScreen = AppScreen.SETTINGS
+                            onScreenChange(AppScreen.SETTINGS)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Drawer Footer
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 14.dp)
+                    ) {
+                        Text(
+                            text = "FocusCrew • 100% Offline Shield",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                        )
+                        Text(
+                            text = "Zero tracking • Privacy first",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        )
+                    }
                 }
             }
         }
