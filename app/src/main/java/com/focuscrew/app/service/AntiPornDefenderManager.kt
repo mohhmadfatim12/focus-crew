@@ -152,6 +152,53 @@ object AntiPornDefenderManager {
     )
 
 
+    val KNOWN_URL_BAR_VIEW_IDS: Set<String> = KNOWN_URL_BAR_IDS
+
+    fun isKnownUrlBarId(viewId: String): Boolean {
+        if (viewId.isBlank()) return false
+        if (KNOWN_URL_BAR_IDS.contains(viewId)) return true
+        val lower = viewId.lowercase()
+        return lower.endsWith(":id/url_bar") ||
+               lower.endsWith(":id/search_box_text") ||
+               lower.endsWith(":id/omnibox_text") ||
+               lower.endsWith(":id/location_bar") ||
+               lower.endsWith(":id/location_bar_edit_text") ||
+               lower.endsWith(":id/toolbar_url_bar")
+    }
+
+    fun extractActiveBrowserUrl(rootNode: AccessibilityNodeInfo?): String? {
+        if (rootNode == null) return null
+        for (viewId in KNOWN_URL_BAR_IDS) {
+            try {
+                val nodes = rootNode.findAccessibilityNodeInfosByViewId(viewId)
+                if (!nodes.isNullOrEmpty()) {
+                    for (node in nodes) {
+                        val text = node.text?.toString()?.trim()
+                        if (!text.isNullOrBlank()) return text
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    fun isLocalOrExemptUrl(urlOrText: String): Boolean {
+        if (urlOrText.isBlank()) return false
+        val lower = urlOrText.lowercase().trim()
+        return lower.contains("localhost") ||
+               lower.contains("127.0.0.1") ||
+               lower.contains("192.168.") ||
+               lower.contains("10.") ||
+               lower.contains("172.16.") || lower.contains("172.17.") || lower.contains("172.18.") ||
+               lower.contains("172.19.") || lower.contains("172.20.") || lower.contains("172.21.") ||
+               lower.contains("172.22.") || lower.contains("172.23.") || lower.contains("172.24.") ||
+               lower.contains("172.25.") || lower.contains("172.26.") || lower.contains("172.27.") ||
+               lower.contains("172.28.") || lower.contains("172.29.") || lower.contains("172.30.") ||
+               lower.contains("172.31.") ||
+               lower.contains(".local") ||
+               lower.contains("::1")
+    }
+
     fun initialize(context: Context) {
         if (prefs == null) {
             prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -308,6 +355,7 @@ object AntiPornDefenderManager {
      * Returns true if the URL should be IMMEDIATELY blocked.
      */
     fun isNavigatingToSafeSearchSettings(urlText: String): Boolean {
+        if (isLocalOrExemptUrl(urlText)) return false
         val lower = urlText.lowercase().trim()
         for (pattern in SAFESEARCH_SETTINGS_URLS) {
             if (lower.contains(pattern)) return true
@@ -333,19 +381,26 @@ object AntiPornDefenderManager {
     fun detectSafeSearchSettingsPage(rootNode: AccessibilityNodeInfo?): String? {
         if (rootNode == null || !_isSafeSearchEnforced.value) return null
 
+        val currentUrl = extractActiveBrowserUrl(rootNode)
+        if (currentUrl != null && isLocalOrExemptUrl(currentUrl)) {
+            return null
+        }
+
         // 1. Check URL bar — is user navigating to a SafeSearch settings page?
-        for (viewId in KNOWN_URL_BAR_IDS) {
-            try {
-                val nodes = rootNode.findAccessibilityNodeInfosByViewId(viewId)
-                if (!nodes.isNullOrEmpty()) {
-                    for (node in nodes) {
-                        val url = node.text?.toString() ?: ""
-                        if (url.isNotBlank() && isNavigatingToSafeSearchSettings(url)) {
-                            return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
+        if (currentUrl != null && isNavigatingToSafeSearchSettings(currentUrl)) {
+            return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
+        }
+
+        // If active URL bar is an explicit non-search domain, it is NOT a search engine settings page!
+        if (currentUrl != null) {
+            val isSearchDomain = currentUrl.contains("google.") ||
+                currentUrl.contains("bing.com") ||
+                currentUrl.contains("duckduckgo.com") ||
+                currentUrl.contains("yahoo.com") ||
+                currentUrl.contains("yandex.")
+            if (!isSearchDomain) {
+                return null
+            }
         }
 
         // 2. Scan full window text for SafeSearch settings page indicators
@@ -354,9 +409,9 @@ object AntiPornDefenderManager {
         val windowCombined = allTexts.joinToString(" ").lowercase()
 
         // Google SafeSearch settings page detection
-        val isGoogleSafeSearchPage = windowCombined.contains("google.com/safesearch") ||
-            (windowCombined.contains("explicit results filter") && windowCombined.contains("filter") && windowCombined.contains("blur")) ||
-            (windowCombined.contains("safesearch") && windowCombined.contains("filter") && windowCombined.contains("blur") && windowCombined.contains("off"))
+        val isGoogleSafeSearchPage = (currentUrl?.contains("google.") == true && (currentUrl.contains("/safesearch") || currentUrl.contains("/preferences") || currentUrl.contains("/setprefs"))) ||
+            (windowCombined.contains("google.com/safesearch") && (windowCombined.contains("filter") || windowCombined.contains("blur") || windowCombined.contains("off"))) ||
+            (windowCombined.contains("explicit results filter") && windowCombined.contains("safesearch") && (windowCombined.contains("filter") || windowCombined.contains("blur") || windowCombined.contains("off")))
 
         if (isGoogleSafeSearchPage) {
             // Auto-click Filter before pressing BACK to ensure SafeSearch stays locked!
@@ -373,15 +428,15 @@ object AntiPornDefenderManager {
         }
 
         // DuckDuckGo SafeSearch settings page detection
-        val isDdgSafeSearchPage = windowCombined.contains("duckduckgo.com/settings") ||
-            (windowCombined.contains("duckduckgo") && windowCombined.contains("safe search"))
+        val isDdgSafeSearchPage = (windowCombined.contains("duckduckgo.com/settings") || windowCombined.contains("duckduckgo.com/?kp=")) &&
+            (windowCombined.contains("duckduckgo") || windowCombined.contains("safe search"))
 
         if (isDdgSafeSearchPage) {
             return "SafeSearch Locked: DuckDuckGo SafeSearch settings page is blocked!"
         }
 
         // Yahoo SafeSearch settings page detection
-        val isYahooSafeSearchPage = windowCombined.contains("search.yahoo.com/preferences") ||
+        val isYahooSafeSearchPage = windowCombined.contains("search.yahoo.com/preferences") &&
             (windowCombined.contains("yahoo") && windowCombined.contains("safesearch"))
 
         if (isYahooSafeSearchPage) {
@@ -393,6 +448,17 @@ object AntiPornDefenderManager {
 
     fun detectSafeSearchTamper(event: android.view.accessibility.AccessibilityEvent?, rootNode: AccessibilityNodeInfo?): String? {
         if (!_isSafeSearchEnforced.value) return null
+
+        val currentUrl = extractActiveBrowserUrl(rootNode)
+        if (currentUrl != null && isLocalOrExemptUrl(currentUrl)) {
+            return null
+        }
+
+        val sourceViewId = try { event?.source?.viewIdResourceName ?: "" } catch (_: Exception) { "" }
+        val isUrlOrSearchField = isKnownUrlBarId(sourceViewId) ||
+                                 sourceViewId.contains("url_bar") ||
+                                 sourceViewId.contains("omnibox") ||
+                                 sourceViewId.contains("search_box")
 
         val eventTexts = mutableListOf<String>()
         if (event != null) {
@@ -407,80 +473,50 @@ object AntiPornDefenderManager {
         }
         val eventCombined = eventTexts.joinToString(" ")
 
-        // 0. PROACTIVE: Detect if URL bar is navigating to SafeSearch settings
-        if (isNavigatingToSafeSearchSettings(eventCombined)) {
-            return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
-        }
+        // Only evaluate event text as URL navigation or tamper if it comes from a URL bar or search field
+        if (isUrlOrSearchField) {
+            // 0. PROACTIVE: Detect if URL bar is navigating to SafeSearch settings
+            if (isNavigatingToSafeSearchSettings(eventCombined)) {
+                return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
+            }
 
-        // 1. Direct SafeSearch bypass parameter in event text or omnibox
-        if (eventCombined.contains("safesearch=off") ||
-            eventCombined.contains("safesearch=0") ||
-            eventCombined.contains("safe=off") ||
-            eventCombined.contains("safe=images") ||
-            eventCombined.contains("adlt=off") ||
-            eventCombined.contains("adlt=demote") ||
-            eventCombined.contains("kp=-2")
-        ) {
-            return "SafeSearch Locked: SafeSearch is permanently locked on!"
-        }
+            // 1. Direct SafeSearch bypass parameter in event text or omnibox
+            if (eventCombined.contains("safesearch=off") ||
+                eventCombined.contains("safesearch=0") ||
+                eventCombined.contains("safe=off") ||
+                eventCombined.contains("safe=images") ||
+                eventCombined.contains("adlt=off") ||
+                eventCombined.contains("adlt=demote") ||
+                eventCombined.contains("kp=-2")
+            ) {
+                return "SafeSearch Locked: SafeSearch is permanently locked on!"
+            }
 
-        // 2. Direct intent to disable SafeSearch
-        if (eventCombined.contains("turn off safesearch") ||
-            eventCombined.contains("turn safesearch off") ||
-            eventCombined.contains("disable safesearch") ||
-            eventCombined.contains("disable safe search") ||
-            eventCombined.contains("turn off safe search") ||
-            eventCombined.contains("turn safe search off") ||
-            eventCombined.contains("safesearch: off") ||
-            eventCombined.contains("safesearch is off") ||
-            eventCombined.contains("safesearch off") ||
-            eventCombined.contains("safe search off") ||
-            eventCombined.contains("turn off explicit results") ||
-            eventCombined.contains("how to disable safesearch") ||
-            eventCombined.contains("how to turn off safesearch") ||
-            eventCombined.contains("remove safesearch") ||
-            eventCombined.contains("unlock safesearch")
-        ) {
-            return "SafeSearch Locked: SafeSearch is permanently locked on!"
+            // 2. Direct intent to disable SafeSearch
+            if (eventCombined.contains("turn off safesearch") ||
+                eventCombined.contains("turn safesearch off") ||
+                eventCombined.contains("disable safesearch") ||
+                eventCombined.contains("disable safe search") ||
+                eventCombined.contains("turn off safe search") ||
+                eventCombined.contains("turn safe search off") ||
+                eventCombined.contains("safesearch: off") ||
+                eventCombined.contains("safesearch is off") ||
+                eventCombined.contains("safesearch off") ||
+                eventCombined.contains("safe search off") ||
+                eventCombined.contains("turn off explicit results") ||
+                eventCombined.contains("how to disable safesearch") ||
+                eventCombined.contains("how to turn off safesearch") ||
+                eventCombined.contains("remove safesearch") ||
+                eventCombined.contains("unlock safesearch")
+            ) {
+                return "SafeSearch Locked: SafeSearch is permanently locked on!"
+            }
         }
 
         // 3. PROACTIVE PAGE DETECTION: If the full window is showing a SafeSearch settings page, block it immediately!
         if (rootNode != null) {
             val pageDetection = detectSafeSearchSettingsPage(rootNode)
             if (pageDetection != null) return pageDetection
-        }
-
-        // 4. Whole-window hierarchy analysis for remaining cases
-        if (rootNode != null) {
-            val allTexts = mutableListOf<String>()
-            collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 40)
-            val windowCombined = allTexts.joinToString(" ").lowercase()
-
-            val isSafeSearchSettings = windowCombined.contains("google.com/safesearch") ||
-                (windowCombined.contains("safesearch") && (windowCombined.contains("filter") || windowCombined.contains("blur") || windowCombined.contains("off")))
-
-            if (isSafeSearchSettings) {
-                // If user is inside SafeSearch settings:
-                // ANY interaction is blocked — don't wait for them to tap Off or Blur!
-                // Auto-enforce Filter mode then kick them out!
-                tryEnforceFilterMode(rootNode)
-                return "SafeSearch Locked: SafeSearch Filter mode is permanently locked on!"
-            }
-
-            // Bing SafeSearch settings in window
-            if ((windowCombined.contains("strict") || windowCombined.contains("moderate") || windowCombined.contains("off")) &&
-                windowCombined.contains("safesearch") && windowCombined.contains("bing")) {
-                return "SafeSearch Locked: Bing SafeSearch settings are permanently locked!"
-            }
-
-            // Secure DNS Tamper Prevention
-            if (windowCombined.contains("use secure dns") ||
-                windowCombined.contains("choose another provider") ||
-                windowCombined.contains("custom dns") ||
-                windowCombined.contains("private dns")
-            ) {
-                return "DNS Shield Lock: Secure DNS cannot be changed to bypass protection!"
-            }
         }
 
         return null
@@ -495,17 +531,31 @@ object AntiPornDefenderManager {
     fun enforceSafeSearchFilter(rootNode: AccessibilityNodeInfo?): Boolean {
         if (rootNode == null || !_isSafeSearchEnforced.value) return false
 
+        val currentUrl = extractActiveBrowserUrl(rootNode)
+        if (currentUrl != null && isLocalOrExemptUrl(currentUrl)) {
+            return false
+        }
+
+        if (currentUrl != null) {
+            val isSearchDomain = currentUrl.contains("google.") ||
+                currentUrl.contains("bing.com") ||
+                currentUrl.contains("duckduckgo.com") ||
+                currentUrl.contains("yahoo.com") ||
+                currentUrl.contains("yandex.")
+            if (!isSearchDomain) {
+                return false
+            }
+        }
+
         // Check visible texts
         val allTexts = mutableListOf<String>()
         collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 40)
         val combined = allTexts.joinToString(" ").lowercase()
 
-        val isSafeSearchContext = (combined.contains("safesearch") || combined.contains("safe search")) &&
-            (combined.contains("filter") || combined.contains("blur") || combined.contains("off") || combined.contains("strict")) ||
-            combined.contains("explicit results") ||
-            combined.contains("google.com/safesearch") ||
-            combined.contains("bing.com/account") ||
-            combined.contains("duckduckgo.com/settings")
+        val isSafeSearchContext = (combined.contains("google.com/safesearch") ||
+            (combined.contains("explicit results filter") && combined.contains("safesearch")) ||
+            (combined.contains("bing.com/account") && combined.contains("safesearch")) ||
+            (combined.contains("duckduckgo.com/settings") && combined.contains("safe search")))
 
         if (!isSafeSearchContext) return false
 
@@ -601,6 +651,23 @@ object AntiPornDefenderManager {
      */
     fun isAttemptingToDisableSafeSearch(event: android.view.accessibility.AccessibilityEvent?, rootNode: AccessibilityNodeInfo?): Boolean {
         if (!_isSafeSearchEnforced.value) return false
+
+        val currentUrl = extractActiveBrowserUrl(rootNode)
+        if (currentUrl != null && isLocalOrExemptUrl(currentUrl)) {
+            return false
+        }
+
+        if (currentUrl != null) {
+            val isSearchDomain = currentUrl.contains("google.") ||
+                currentUrl.contains("bing.com") ||
+                currentUrl.contains("duckduckgo.com") ||
+                currentUrl.contains("yahoo.com") ||
+                currentUrl.contains("yandex.")
+            if (!isSearchDomain) {
+                return false
+            }
+        }
+
         val source = try { event?.source } catch (_: Exception) { null }
         val clickedText = source?.text?.toString()?.trim() ?: ""
         val clickedDesc = source?.contentDescription?.toString()?.trim() ?: ""
@@ -615,13 +682,15 @@ object AntiPornDefenderManager {
 
         if (!isOffOrBlurAttempt) return false
 
-        // Check if current screen is SafeSearch
+        // Check if current screen is genuinely SafeSearch settings page
         val allTexts = mutableListOf<String>()
         collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 35)
         val windowCombined = allTexts.joinToString(" ").lowercase()
 
-        return (windowCombined.contains("safesearch") || windowCombined.contains("safe search")) &&
-               (windowCombined.contains("filter") || windowCombined.contains("explicit") || windowCombined.contains("google.com/safesearch"))
+        return (windowCombined.contains("google.com/safesearch") ||
+               (windowCombined.contains("explicit results filter") && windowCombined.contains("safesearch")) ||
+               (windowCombined.contains("bing.com/account") && windowCombined.contains("safesearch")) ||
+               (windowCombined.contains("duckduckgo.com/settings") && windowCombined.contains("safe search")))
     }
 
     private fun tryEnforceFilterMode(node: AccessibilityNodeInfo?) {
@@ -645,68 +714,42 @@ object AntiPornDefenderManager {
     private fun scanNodeForSafeSearchTamper(node: AccessibilityNodeInfo?, depth: Int, maxDepth: Int): String? {
         if (node == null || depth > maxDepth) return null
 
+        val viewId = try { node.viewIdResourceName ?: "" } catch (_: Exception) { "" }
+        val isUrlBarNode = isKnownUrlBarId(viewId)
+
         val text = node.text?.toString()?.lowercase() ?: ""
         val desc = node.contentDescription?.toString()?.lowercase() ?: ""
         val combined = "$text $desc"
 
-        // URL-bar level: Detect navigation to SafeSearch settings pages
-        if (isNavigatingToSafeSearchSettings(combined)) {
-            return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
-        }
+        if (isLocalOrExemptUrl(combined)) return null
 
-        if (combined.contains("safe=off") ||
-            combined.contains("safe=images") ||
-            combined.contains("safesearch=off") ||
-            combined.contains("safesearch=0") ||
-            combined.contains("adlt=off") ||
-            combined.contains("adlt=demote") ||
-            combined.contains("kp=-2")
-        ) {
-            return "SafeSearch Locked: Titan Fortress permanently locks SafeSearch on!"
-        }
+        // URL-bar level: Detect navigation to SafeSearch settings pages ONLY on URL bar nodes
+        if (isUrlBarNode) {
+            if (isNavigatingToSafeSearchSettings(combined)) {
+                return "SafeSearch Locked: Navigation to SafeSearch settings is blocked!"
+            }
 
-        // Catch explicit requests to turn off or disable SafeSearch
-        if (combined.contains("turn off safesearch") ||
-            combined.contains("turn safesearch off") ||
-            combined.contains("disable safesearch") ||
-            combined.contains("disable safe search") ||
-            combined.contains("turn off safe search") ||
-            combined.contains("turn safe search off") ||
-            combined.contains("safesearch off") ||
-            combined.contains("safe search off") ||
-            combined.contains("how to turn off safesearch") ||
-            combined.contains("safesearch: off") ||
-            combined.contains("safesearch is off") ||
-            combined.contains("off - turn off explicit") ||
-            combined.contains("turn off explicit results") ||
-            combined.contains("how to disable safesearch") ||
-            combined.contains("remove safesearch") ||
-            combined.contains("unlock safesearch") ||
-            combined.contains("bypass safesearch")
-        ) {
-            return "SafeSearch Locked: Titan Fortress permanently locks SafeSearch on!"
+            if (combined.contains("safe=off") ||
+                combined.contains("safe=images") ||
+                combined.contains("safesearch=off") ||
+                combined.contains("safesearch=0") ||
+                combined.contains("adlt=off") ||
+                combined.contains("adlt=demote") ||
+                combined.contains("kp=-2")
+            ) {
+                return "SafeSearch Locked: Titan Fortress permanently locks SafeSearch on!"
+            }
         }
 
         // SafeSearch settings page indicators (Google, Bing, DuckDuckGo, Yahoo)
-        // Detect the page even if user hasn't clicked anything yet!
         if (combined.contains("google.com/safesearch") ||
-            combined.contains("explicit results filter") ||
+            (combined.contains("explicit results filter") && combined.contains("safesearch")) ||
             (combined.contains("bing.com/account") && (combined.contains("safesearch") || combined.contains("safe search"))) ||
             (combined.contains("bing.com/preferences") && (combined.contains("safesearch") || combined.contains("safe search"))) ||
             combined.contains("duckduckgo.com/settings") ||
             combined.contains("search.yahoo.com/preferences")
         ) {
             return "SafeSearch Locked: SafeSearch settings page is blocked!"
-        }
-
-        // DNS Tamper Detection in Browser (Secure DNS / Custom DNS / Provider switches)
-        if (combined.contains("use secure dns") ||
-            combined.contains("choose another provider") ||
-            combined.contains("custom dns") ||
-            combined.contains("private dns") ||
-            combined.contains("dns provider hostname")
-        ) {
-            return "DNS Shield Lock: Secure DNS cannot be changed to bypass protection!"
         }
 
         val childCount = node.childCount

@@ -358,6 +358,12 @@ class BlockerAccessibilityService : AccessibilityService() {
         // This runs on EVERY event in a browser or search app to enforce FILTER mode!
         if (activeBrowser != null && AntiPornDefenderManager.isSafeSearchEnforced.value) {
             val browserRoot = getActiveBrowserRootNode()
+            val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
+
+            // CRITICAL: Localhost or internal test servers are 100% exempt from SafeSearch locks!
+            if (activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) {
+                return
+            }
 
             // 1. Intercept user actively tapping "Off" or "Blur" in SafeSearch
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
@@ -372,20 +378,32 @@ class BlockerAccessibilityService : AccessibilityService() {
             // 2. Continuously lock SafeSearch ON FILTER if settings UI is open
             AntiPornDefenderManager.enforceSafeSearchFilter(browserRoot)
 
-            // 3. FAST CHECK: Scan event text directly for SafeSearch URLs
+            // 3. FAST CHECK: Scan URL bar directly for SafeSearch URLs
             var fastSafeSearchDetected = false
-            val eventTextBuilder = StringBuilder()
-            for (t in event.text) {
-                eventTextBuilder.append(t?.toString()?.lowercase() ?: "").append(' ')
-            }
-            val evSourceText = event.source?.text?.toString()?.lowercase() ?: ""
-            eventTextBuilder.append(evSourceText).append(' ')
-            val evDesc = event.contentDescription?.toString()?.lowercase() ?: ""
-            eventTextBuilder.append(evDesc)
-            val fastEventText = eventTextBuilder.toString()
-
-            if (AntiPornDefenderManager.isNavigatingToSafeSearchSettings(fastEventText)) {
+            if (activeUrl != null && AntiPornDefenderManager.isNavigatingToSafeSearchSettings(activeUrl)) {
                 fastSafeSearchDetected = true
+            }
+
+            val sourceViewId = try { event.source?.viewIdResourceName ?: "" } catch (_: Exception) { "" }
+            val isUrlBarEvent = AntiPornDefenderManager.isKnownUrlBarId(sourceViewId) ||
+                                sourceViewId.contains("url_bar") ||
+                                sourceViewId.contains("omnibox") ||
+                                sourceViewId.contains("search_box")
+
+            if (!fastSafeSearchDetected && isUrlBarEvent) {
+                val eventTextBuilder = StringBuilder()
+                for (t in event.text) {
+                    eventTextBuilder.append(t?.toString()?.lowercase() ?: "").append(' ')
+                }
+                val evSourceText = event.source?.text?.toString()?.lowercase() ?: ""
+                eventTextBuilder.append(evSourceText).append(' ')
+                val evDesc = event.contentDescription?.toString()?.lowercase() ?: ""
+                eventTextBuilder.append(evDesc)
+                val fastEventText = eventTextBuilder.toString()
+
+                if (AntiPornDefenderManager.isNavigatingToSafeSearchSettings(fastEventText)) {
+                    fastSafeSearchDetected = true
+                }
             }
 
             // 4. FAST CHECK: Full window hierarchy scan for SafeSearch settings page
@@ -417,6 +435,14 @@ class BlockerAccessibilityService : AccessibilityService() {
             !isEssentialSafePackage(rawPackageName) &&
             rawPackageName != packageName
         ) {
+            val browserRoot = getActiveBrowserRootNode()
+            val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
+
+            // CRITICAL: Localhost / internal test servers are 100% exempt from adult blocker checks
+            if (activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) {
+                return
+            }
+
             val effectivePkg = activeBrowser
             var detectedTrigger: String? = null
 
@@ -451,7 +477,6 @@ class BlockerAccessibilityService : AccessibilityService() {
             }
 
             // 4. SafeSearch & DNS Tamper Prevention: If user tries to disable SafeSearch or change DNS
-            val browserRoot = getActiveBrowserRootNode()
             if (detectedTrigger == null && AntiPornDefenderManager.isSafeSearchEnforced.value && browserRoot != null) {
                 detectedTrigger = AntiPornDefenderManager.detectSafeSearchTamper(event, browserRoot)
             }
