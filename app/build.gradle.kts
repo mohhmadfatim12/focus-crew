@@ -54,7 +54,12 @@ android {
             )
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            val jksFile = file("focuscrew-release.jks")
+            if (jksFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 

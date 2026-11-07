@@ -78,6 +78,7 @@ fun AppPickerScreen(
     val blockedPackages by BlockerManager.blockedPackages.collectAsState()
     val isDopamineDetoxEnabled by AntiPornDefenderManager.isDefenderEnabled.collectAsState()
     val isAlwaysOnBlocking by BlockerManager.isAlwaysOnBlockingEnabled.collectAsState()
+    val isServiceConnected by BlockerManager.isServiceConnected.collectAsState()
 
     val timerSnapshot by TimerManager.snapshot.collectAsState()
     val isTimerActive = timerSnapshot.status is TimerStatus.Running ||
@@ -212,14 +213,49 @@ fun AppPickerScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // 0. TIMER SESSION STATUS BANNER
+        // 0. ACCESSIBILITY PERMISSION WARNING (If disabled)
+        if (!isServiceConnected) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clickable {
+                        try {
+                            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("⚠️", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Accessibility Service is OFF. Tap here to turn it ON so apps can be blocked.",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // 0. TIMER / SHIELD STATUS BANNER
         Surface(
             shape = RoundedCornerShape(10.dp),
-            color = if (isTimerActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            color = if (isAlwaysOnBlocking || isTimerActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             border = BorderStroke(
                 1.dp,
-                if (isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                if (isAlwaysOnBlocking || isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
             ),
             modifier = Modifier
@@ -230,14 +266,24 @@ fun AppPickerScreen(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(if (isTimerActive) "⏱️" else "ℹ️", fontSize = 14.sp)
+                Text(
+                    text = when {
+                        isAlwaysOnBlocking -> "⚡"
+                        isTimerActive -> "⏱️"
+                        else -> "ℹ️"
+                    },
+                    fontSize = 14.sp
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (isTimerActive) "Focus Timer Running — Selected apps are locked."
-                           else "Apps are blocked ONLY during an active Focus Timer session.",
+                    text = when {
+                        isAlwaysOnBlocking -> "24/7 Shield Active — Selected apps are continuously locked."
+                        isTimerActive -> "Focus Timer Running — Selected apps are locked."
+                        else -> "Timer Mode — Selected apps are locked during focus sessions."
+                    },
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (isTimerActive) MaterialTheme.colorScheme.onPrimaryContainer
+                    color = if (isAlwaysOnBlocking || isTimerActive) MaterialTheme.colorScheme.onPrimaryContainer
                             else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
