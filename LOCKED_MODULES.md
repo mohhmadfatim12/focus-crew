@@ -3,7 +3,7 @@
 **Status:** PRODUCTION STABLE & LOCKED  
 **Tags:** `v1.0.1` / `v1.0.0-stable`  
 **Verified On:** Physical Android Device (User 0)  
-**Binary SHA-256:** `2efa9ae9d3221fb2c0a29913be8ac207a6292d632f95676935e54c231192db84`  
+**Binary SHA-256:** `c80fcaa91db15076ee3f7867340db4ebcd3267f146f77d67e7319b1ca5abb546`  
 **Last Updated:** 2026-11-08  
 
 ---
