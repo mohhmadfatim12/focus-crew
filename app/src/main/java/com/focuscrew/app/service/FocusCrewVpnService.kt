@@ -621,51 +621,33 @@ class FocusCrewVpnService : VpnService() {
     }
 
     /**
-     * Forwards a clean DNS query to upstream Tier-1 DNS resolvers (Cloudflare & Google)
-     * using high-speed concurrent racing (800ms timeout).
-     * Whichever Anycast server responds first immediately delivers the response,
-     * ensuring zero latency and zero website loading struggle!
+     * Forwards a clean DNS query to upstream Tier-1 DNS resolvers (Cloudflare 1.1.1.1 & Google 8.8.8.8)
+     * with fast failover across Anycast servers.
      */
     private fun forwardDnsQuery(dnsPayload: ByteArray): ByteArray? {
-        val resultQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
-        val primaryServers = listOf("1.1.1.1", "8.8.8.8", "1.0.0.1", "8.8.4.4")
-        val activeSockets = java.util.concurrent.CopyOnWriteArrayList<DatagramSocket>()
-
-        for (serverIp in primaryServers) {
-            forwardExecutor.execute {
-                var socket: DatagramSocket? = null
-                try {
-                    socket = DatagramSocket()
-                    activeSockets.add(socket)
-                    protect(socket)
-                    socket.soTimeout = 800
-
-                    val target = InetAddress.getByName(serverIp)
-                    val outPacket = DatagramPacket(dnsPayload, dnsPayload.size, target, DNS_PORT)
-                    socket.send(outPacket)
-
-                    val buffer = ByteArray(MAX_PACKET_SIZE)
-                    val inPacket = DatagramPacket(buffer, buffer.size)
-                    socket.receive(inPacket)
-
-                    if (inPacket.length > 0) {
-                        resultQueue.offer(buffer.copyOfRange(0, inPacket.length))
-                    }
-                } catch (_: Exception) {
-                } finally {
-                    try { socket?.close() } catch (_: Exception) {}
+        val servers = listOf("1.1.1.1", "8.8.8.8", "1.0.0.1", "8.8.4.4", "9.9.9.9")
+        for (serverIp in servers) {
+            var socket: DatagramSocket? = null
+            try {
+                socket = DatagramSocket()
+                protect(socket)
+                socket.soTimeout = 1200
+                val target = InetAddress.getByName(serverIp)
+                val outPacket = DatagramPacket(dnsPayload, dnsPayload.size, target, DNS_PORT)
+                socket.send(outPacket)
+                val buffer = ByteArray(MAX_PACKET_SIZE)
+                val inPacket = DatagramPacket(buffer, buffer.size)
+                socket.receive(inPacket)
+                if (inPacket.length > 0) {
+                    return buffer.copyOfRange(0, inPacket.length)
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failover from $serverIp: ${e.message}")
+            } finally {
+                try { socket?.close() } catch (_: Exception) {}
             }
         }
-
-        val res = try {
-            resultQueue.poll(850, java.util.concurrent.TimeUnit.MILLISECONDS)
-        } catch (_: Exception) { null }
-
-        for (s in activeSockets) {
-            try { s.close() } catch (_: Exception) {}
-        }
-        return res
+        return null
     }
 
     /**
