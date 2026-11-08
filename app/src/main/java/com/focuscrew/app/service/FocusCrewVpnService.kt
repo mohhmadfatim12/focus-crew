@@ -155,35 +155,31 @@ class FocusCrewVpnService : VpnService() {
                 Log.w(TAG, "IPv6 route setup: ${e.message}")
             }
 
-            // CRITICAL: Allow apps (browsers) to bypass the VPN for all non-VPN traffic!
-            // This ensures that actual web browsing (HTTP/HTTPS to GitHub, Wikipedia, Google, YouTube, etc.)
-            // connects directly through physical Wi-Fi/Cellular at 100% full speed, while DNS lookups
-            // are strictly routed to 10.245.0.2 for adult content blackholing & SafeSearch VIP locking.
+            // CRITICAL: Allow bypass so all non-VPN traffic (all HTTP/HTTPS TCP web traffic)
+            // connects directly through physical Wi-Fi/Cellular at 100% full speed with zero lag!
             builder.allowBypass()
             builder.setBlocking(true)
 
-            // STRICT PER-APP SPLIT TUNNEL:
-            // Route ONLY web browsers through the VPN!
-            // WhatsApp, Free Fire, PUBG Mobile, YouTube, Instagram, and all other apps
-            // completely bypass this VPN and run at 100% full speed with zero lag!
-            val allowedBrowsers = getInstalledBrowserPackages(this)
-            Log.d(TAG, "Configuring VPN strictly for browsers (${allowedBrowsers.size} detected): $allowedBrowsers")
-
-            var allowedCount = 0
-            for (pkg in allowedBrowsers) {
+            // SPLIT-TUNNEL PROTECTION:
+            // Explicitly exclude games, chat apps, and streaming apps so their traffic is completely untouched by the VPN
+            for (pkg in AntiPornDefenderManager.NON_BROWSER_PACKAGES) {
                 try {
-                    builder.addAllowedApplication(pkg)
-                    allowedCount++
-                    Log.d(TAG, "VPN restricted to browser: $pkg")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not add allowed browser $pkg: ${e.message}")
-                }
+                    packageManager.getPackageInfo(pkg, 0)
+                    builder.addDisallowedApplication(pkg)
+                } catch (_: Exception) {}
             }
-
-            // If no browser package was allowed, do NOT route device traffic! Abort VPN to protect internet.
-            if (allowedCount == 0) {
-                Log.w(TAG, "No allowed browser installed or active. Aborting VPN to safeguard device internet connectivity.")
-                return
+            try {
+                val installed = packageManager.getInstalledPackages(0)
+                for (pi in installed) {
+                    val p = pi.packageName
+                    if (isExcludedNonBrowser(p)) {
+                        try {
+                            builder.addDisallowedApplication(p)
+                        } catch (_: Exception) {}
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error adding disallowed applications: ${e.message}")
             }
 
             vpnInterface = builder.establish()
@@ -625,35 +621,51 @@ class FocusCrewVpnService : VpnService() {
     }
 
     /**
-     * Forwards a clean DNS query to upstream Tier-1 DNS resolvers (Cloudflare & Google).
-     * Reliable 2000ms timeout with automatic failover to prevent mobile data packet drops.
+     * Forwards a clean DNS query to upstream Tier-1 DNS resolvers (Cloudflare & Google)
+     * using high-speed concurrent racing (800ms timeout).
+     * Whichever Anycast server responds first immediately delivers the response,
+     * ensuring zero latency and zero website loading struggle!
      */
     private fun forwardDnsQuery(dnsPayload: ByteArray): ByteArray? {
-        for (serverIp in UPSTREAM_DNS_SERVERS) {
-            var socket: DatagramSocket? = null
-            try {
-                socket = DatagramSocket()
-                protect(socket)
-                socket.soTimeout = 2000 // 2.0s timeout ensures stable research on mobile networks
+        val resultQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
+        val primaryServers = listOf("1.1.1.1", "8.8.8.8", "1.0.0.1", "8.8.4.4")
+        val activeSockets = java.util.concurrent.CopyOnWriteArrayList<DatagramSocket>()
 
-                val target = InetAddress.getByName(serverIp)
-                val outPacket = DatagramPacket(dnsPayload, dnsPayload.size, target, DNS_PORT)
-                socket.send(outPacket)
+        for (serverIp in primaryServers) {
+            forwardExecutor.execute {
+                var socket: DatagramSocket? = null
+                try {
+                    socket = DatagramSocket()
+                    activeSockets.add(socket)
+                    protect(socket)
+                    socket.soTimeout = 800
 
-                val buffer = ByteArray(MAX_PACKET_SIZE)
-                val inPacket = DatagramPacket(buffer, buffer.size)
-                socket.receive(inPacket)
+                    val target = InetAddress.getByName(serverIp)
+                    val outPacket = DatagramPacket(dnsPayload, dnsPayload.size, target, DNS_PORT)
+                    socket.send(outPacket)
 
-                if (inPacket.length > 0) {
-                    return buffer.copyOfRange(0, inPacket.length)
+                    val buffer = ByteArray(MAX_PACKET_SIZE)
+                    val inPacket = DatagramPacket(buffer, buffer.size)
+                    socket.receive(inPacket)
+
+                    if (inPacket.length > 0) {
+                        resultQueue.offer(buffer.copyOfRange(0, inPacket.length))
+                    }
+                } catch (_: Exception) {
+                } finally {
+                    try { socket?.close() } catch (_: Exception) {}
                 }
-            } catch (_: Exception) {
-                // Try next server on timeout or failover
-            } finally {
-                try { socket?.close() } catch (_: Exception) {}
             }
         }
-        return null
+
+        val res = try {
+            resultQueue.poll(850, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: Exception) { null }
+
+        for (s in activeSockets) {
+            try { s.close() } catch (_: Exception) {}
+        }
+        return res
     }
 
     /**

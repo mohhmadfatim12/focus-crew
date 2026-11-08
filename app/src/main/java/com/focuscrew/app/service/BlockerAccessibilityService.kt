@@ -366,9 +366,14 @@ class BlockerAccessibilityService : AccessibilityService() {
             val browserRoot = getActiveBrowserRootNode(event)
             val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
 
-            // CRITICAL: Localhost or internal test servers are 100% exempt from SafeSearch locks!
+            // CRITICAL: Localhost, internal test servers, history, and whitelisted non-search platforms are 100% exempt!
+            val isWhitelistedNonSearch = activeUrl != null &&
+                AntiPornDefenderManager.isCleanOrWhitelistedUrl(activeUrl) &&
+                !AntiPornDefenderManager.isSearchDomainOrEngine(activeUrl, browserRoot)
+
             if ((activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) ||
-                AntiPornDefenderManager.isBrowserHistoryScreen(activeUrl, browserRoot)
+                AntiPornDefenderManager.isBrowserHistoryScreen(activeUrl, browserRoot) ||
+                isWhitelistedNonSearch
             ) {
                 return
             }
@@ -446,8 +451,8 @@ class BlockerAccessibilityService : AccessibilityService() {
             val browserRoot = getActiveBrowserRootNode(event)
             val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
 
-            // CRITICAL: Localhost, internal test servers, and browser history screens are 100% exempt from adult blocker checks
-            if ((activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) ||
+            // CRITICAL: Localhost, internal test servers, browser history, and whitelisted clean sites (GitHub, etc.) are 100% exempt from adult blocker checks
+            if ((activeUrl != null && (AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl) || AntiPornDefenderManager.isCleanOrWhitelistedUrl(activeUrl))) ||
                 AntiPornDefenderManager.isBrowserHistoryScreen(activeUrl, browserRoot)
             ) {
                 return
@@ -457,32 +462,43 @@ class BlockerAccessibilityService : AccessibilityService() {
             var detectedTrigger: String? = null
 
             // 1. Immediate Event Text Check (catches text being typed, search queries, URL bar text)
-            for (textItem in event.text) {
-                val str = textItem?.toString() ?: ""
-                if (str.isNotBlank()) {
-                    val t = AntiPornDefenderManager.detectAdultContent(str)
-                    if (t != null) {
-                        detectedTrigger = t
-                        break
+            // CRITICAL: Only evaluate text if it originates from an editable input, search field, or URL bar!
+            val sourceNode = try { event.source } catch (_: Exception) { null }
+            val sourceId = sourceNode?.viewIdResourceName ?: ""
+            val isEditableOrInput = sourceNode?.isEditable == true ||
+                                    sourceNode?.className?.toString()?.contains("EditText", ignoreCase = true) == true ||
+                                    AntiPornDefenderManager.isKnownUrlBarId(sourceId) ||
+                                    event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED ||
+                                    event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
+
+            if (isEditableOrInput) {
+                for (textItem in event.text) {
+                    val str = textItem?.toString() ?: ""
+                    if (str.isNotBlank()) {
+                        val t = AntiPornDefenderManager.detectAdultContent(str)
+                        if (t != null) {
+                            detectedTrigger = t
+                            break
+                        }
                     }
                 }
-            }
 
-            // 2. Event Source Text Check
-            if (detectedTrigger == null) {
-                val sourceText = event.source?.text?.toString() ?: ""
-                if (sourceText.isNotBlank()) {
-                    val t = AntiPornDefenderManager.detectAdultContent(sourceText)
-                    if (t != null) detectedTrigger = t
+                // 2. Event Source Text Check
+                if (detectedTrigger == null) {
+                    val sourceText = sourceNode?.text?.toString() ?: ""
+                    if (sourceText.isNotBlank()) {
+                        val t = AntiPornDefenderManager.detectAdultContent(sourceText)
+                        if (t != null) detectedTrigger = t
+                    }
                 }
-            }
 
-            // 3. Event Content Description Check
-            if (detectedTrigger == null) {
-                val desc = event.contentDescription?.toString() ?: ""
-                if (desc.isNotBlank()) {
-                    val t = AntiPornDefenderManager.detectAdultContent(desc)
-                    if (t != null) detectedTrigger = t
+                // 3. Event Content Description Check
+                if (detectedTrigger == null) {
+                    val desc = event.contentDescription?.toString() ?: ""
+                    if (desc.isNotBlank()) {
+                        val t = AntiPornDefenderManager.detectAdultContent(desc)
+                        if (t != null) detectedTrigger = t
+                    }
                 }
             }
 

@@ -220,7 +220,73 @@ object AntiPornDefenderManager {
                lower.startsWith("chrome-native://") ||
                lower.startsWith("about:") ||
                lower.startsWith("edge://") ||
-               lower.startsWith("brave://")
+               lower.startsWith("brave://") ||
+               lower.contains("downloads") ||
+               lower.contains("downloadactivity")
+    }
+
+    private val WHITELISTED_DOMAINS = setOf(
+        "github.com",
+        "github.io",
+        "raw.githubusercontent.com",
+        "gist.github.com",
+        "gitlab.com",
+        "bitbucket.org",
+        "stackoverflow.com",
+        "stackexchange.com",
+        "wikipedia.org",
+        "wikimedia.org",
+        "w3schools.com",
+        "developer.mozilla.org",
+        "developer.android.com",
+        "android.com",
+        "google.com",
+        "google.com.pk",
+        "google.co.in",
+        "google.co.uk",
+        "youtube.com",
+        "youtu.be",
+        "netflix.com",
+        "spotify.com",
+        "amazon.com",
+        "microsoft.com",
+        "apple.com",
+        "linkedin.com",
+        "twitter.com",
+        "x.com",
+        "medium.com",
+        "quora.com",
+        "khanacademy.org",
+        "coursera.org",
+        "edx.org",
+        "udemy.com",
+        "openai.com",
+        "anthropic.com",
+        "gemini.google.com",
+        "cloudflare.com",
+        "netlify.app",
+        "vercel.app"
+    )
+
+    fun extractDomainFromUrl(url: String): String {
+        var clean = url.trim().lowercase()
+        if (clean.startsWith("http://")) clean = clean.substring(7)
+        if (clean.startsWith("https://")) clean = clean.substring(8)
+        clean = clean.substringBefore('/').substringBefore('?').substringBefore(':')
+        return clean.removePrefix("www.")
+    }
+
+    /**
+     * Checks if the URL belongs to a verified clean platform or developer/educational domain.
+     * When browsing these websites, web page DOM content is 100% exempt from adult scanning
+     * so technical terms, code snippets, and issues on GitHub never cause false exits.
+     */
+    fun isCleanOrWhitelistedUrl(urlOrText: String): Boolean {
+        if (urlOrText.isBlank()) return false
+        val lower = urlOrText.lowercase().trim()
+        if (isLocalOrExemptUrl(lower)) return true
+        val domain = extractDomainFromUrl(lower)
+        return WHITELISTED_DOMAINS.contains(domain) || WHITELISTED_DOMAINS.any { domain.endsWith(".$it") }
     }
 
     /**
@@ -394,7 +460,10 @@ object AntiPornDefenderManager {
         if (rootNode == null) return null
 
         val activeUrl = extractActiveBrowserUrl(rootNode)
-        if (isLocalOrExemptUrl(activeUrl ?: "") || isBrowserHistoryScreen(activeUrl, rootNode)) {
+        if (isLocalOrExemptUrl(activeUrl ?: "") ||
+            isBrowserHistoryScreen(activeUrl, rootNode) ||
+            isCleanOrWhitelistedUrl(activeUrl ?: "")
+        ) {
             return null
         }
 
@@ -933,30 +1002,28 @@ object AntiPornDefenderManager {
                       viewId.contains("search") ||
                       viewId.contains("omnibox") ||
                       viewId.contains("address") ||
-                      viewId.contains("query") ||
-                      viewId.contains("title")
+                      viewId.contains("query")
 
-        val text = node.text?.toString() ?: ""
-        if (text.isNotBlank()) {
-            if (isInputOrUrl || text.length <= 300) {
+        // CRITICAL: Adult content inspection is strictly restricted to input fields, search queries, and URL bars!
+        // Never inspect arbitrary non-editable web page DOM elements to prevent false positives on coding/research sites!
+        if (isInputOrUrl) {
+            val text = node.text?.toString() ?: ""
+            if (text.isNotBlank()) {
                 val trigger = detectAdultContent(text)
                 if (trigger != null) return trigger
             }
-        }
 
-        val desc = node.contentDescription?.toString() ?: ""
-        if (desc.isNotBlank()) {
-            // Google Images thumbnail descriptions can be up to 500 characters long
-            if (isInputOrUrl || desc.length <= 500) {
+            val desc = node.contentDescription?.toString() ?: ""
+            if (desc.isNotBlank()) {
                 val descTrigger = detectAdultContent(desc)
                 if (descTrigger != null) return descTrigger
             }
-        }
 
-        val hint = node.hintText?.toString() ?: ""
-        if (hint.isNotBlank()) {
-            val hintTrigger = detectAdultContent(hint)
-            if (hintTrigger != null) return hintTrigger
+            val hint = node.hintText?.toString() ?: ""
+            if (hint.isNotBlank()) {
+                val hintTrigger = detectAdultContent(hint)
+                if (hintTrigger != null) return hintTrigger
+            }
         }
 
         val childCount = node.childCount
