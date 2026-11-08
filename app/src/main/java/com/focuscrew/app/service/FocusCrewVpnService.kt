@@ -61,13 +61,14 @@ class FocusCrewVpnService : VpnService() {
         private const val DNS_PORT = 53
         private const val MAX_PACKET_SIZE = 4096
 
-        // Upstream resolvers: CleanBrowsing Family Filter & Cloudflare 1.1.1.3 (Adult Content & Malware Blockers with SafeSearch Enforced)
+        // Upstream Tier-1 Resolvers: Google 8.8.8.8 and Cloudflare 1.1.1.1
+        // 100% universal global reachability across all mobile carriers (VoLTE/4G/5G)
         private val UPSTREAM_DNS_SERVERS = listOf(
-            "185.228.168.168", // CleanBrowsing Family Filter Primary (Blocks adult content, forces SafeSearch on Google, Bing, DuckDuckGo)
-            "1.1.1.3",         // Cloudflare 1.1.1.3 for Families Primary (Blocks malware & adult content)
-            "185.228.169.168", // CleanBrowsing Family Filter Secondary
-            "1.0.0.3",         // Cloudflare 1.1.1.3 for Families Secondary
-            "94.140.14.15"     // AdGuard Family Protection Primary (SafeSearch enforced)
+            "8.8.8.8",         // Google Primary
+            "1.1.1.1",         // Cloudflare Primary
+            "8.8.4.4",         // Google Secondary
+            "1.0.0.1",         // Cloudflare Secondary
+            "9.9.9.9"          // Quad9
         )
 
         // In-memory DNS Cache (Key: "$domain:$queryType" -> Pair<ResponseByteArray, TimestampMs>)
@@ -195,6 +196,9 @@ class FocusCrewVpnService : VpnService() {
             }
 
             vpnInterface = builder.establish()
+            try {
+                setUnderlyingNetworks(null)
+            } catch (_: Exception) {}
 
             if (vpnInterface == null) {
                 Log.e(TAG, "VPN interface could not be established")
