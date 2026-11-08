@@ -120,7 +120,6 @@ object AntiPornDefenderManager {
             return false
         }
         if (NON_BROWSER_PACKAGES.contains(packageName)) return true
-        val lower = packageName.lowercase()
         return lower.contains("whatsapp") ||
                lower.contains("telegram") ||
                lower.contains("instagram") ||
