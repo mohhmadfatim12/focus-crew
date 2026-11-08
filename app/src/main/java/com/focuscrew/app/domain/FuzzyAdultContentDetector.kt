@@ -77,7 +77,6 @@ object FuzzyAdultContentDetector {
         "safesearch=0", "safesearch=off", "adlt=off", "adlt=demote", "kp=-2",
         "turn off safesearch", "turn safesearch off", "disable safesearch", "disable safe search",
         "turn off safe search", "turn safe search off", "how to turn off safesearch", "safesearch is off",
-        "google.com/safesearch", "bing.com/account/general", "duckduckgo.com/settings", "google.com/preferences",
         "porn gif", "porn gifs", "sex gif", "sex gifs", "nude gif", "nude gifs", "xxx gif", "xxx gifs",
         "adult video", "adult movie", "adult film", "adult content", "18+ video", "18+ content",
         "nsfw video", "nsfw pics", "nsfw content", "leaked nudes", "leaked video", "revenge porn",
@@ -107,7 +106,8 @@ object FuzzyAdultContentDetector {
         "sussex", "middlesex", "essex", "unisex", "cocktail",
         "therapist", "assessment", "scunthorpe", "dickens",
         "squirrel", "throat", "razer", "rate", "focus", "vault", "note", "app", "apps",
-        "whatsapp", "game", "games", "fire", "freefire", "pubg", "youtube", "google", "android", "settings"
+        "whatsapp", "game", "games", "fire", "freefire", "pubg", "youtube", "google", "android", "settings",
+        "netlify", "github", "render", "vercel", "gitlab", "npm", "pnpm", "node", "react"
     )
 
     /**

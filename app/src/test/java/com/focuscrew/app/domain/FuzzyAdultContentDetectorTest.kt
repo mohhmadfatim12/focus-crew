@@ -61,9 +61,6 @@ class FuzzyAdultContentDetectorTest {
             "disable safe search",
             "how to turn off safesearch",
             "safesearch is off",
-            "google.com/safesearch",
-            "bing.com/account/general",
-            "duckduckgo.com/settings",
             "adlt=off",
             "kp=-2"
         )
@@ -95,7 +92,12 @@ class FuzzyAdultContentDetectorTest {
             "rock",
             "truck",
             "title",
-            "titanic"
+            "titanic",
+            "netlify",
+            "github",
+            "react",
+            "render",
+            "vercel"
         )
         for (q in innocentAndPartialQueries) {
             val r = FuzzyAdultContentDetector.detect(q)

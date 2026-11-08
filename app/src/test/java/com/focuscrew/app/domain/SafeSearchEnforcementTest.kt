@@ -1,5 +1,6 @@
 package com.focuscrew.app.domain
 
+import com.focuscrew.app.service.AntiPornDefenderManager
 import com.focuscrew.app.service.DnsPacketParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -113,16 +114,35 @@ class SafeSearchEnforcementTest {
             "turn off safe search",
             "turn safe search off",
             "how to turn off safesearch",
-            "safesearch is off",
-            "google.com/safesearch",
-            "bing.com/account/general",
-            "duckduckgo.com/settings",
-            "google.com/preferences"
+            "safesearch is off"
         )
 
         for (attempt in bypassAttempts) {
             val result = FuzzyAdultContentDetector.detect(attempt)
             assertNotNull("SafeSearch disable attempt '$attempt' must be detected & blocked", result)
+        }
+
+        // Test settings navigation via AntiPornDefenderManager
+        val settingsBypassUrls = listOf(
+            "https://www.google.com/safesearch",
+            "https://bing.com/account/general",
+            "https://duckduckgo.com/settings",
+            "https://google.com/preferences"
+        )
+        for (url in settingsBypassUrls) {
+            val result = AntiPornDefenderManager.isNavigatingToSafeSearchSettings(url)
+            assertTrue("Settings navigation '$url' must be blocked", result)
+        }
+
+        val innocentSearchUrls = listOf(
+            "https://www.google.com/search?q=netlify",
+            "https://www.google.com/search?q=github",
+            "https://www.google.com/search?q=react+native",
+            "https://bing.com/search?q=focuscrew"
+        )
+        for (url in innocentSearchUrls) {
+            val result = AntiPornDefenderManager.isNavigatingToSafeSearchSettings(url)
+            assertFalse("Innocent search URL '$url' must NOT be blocked", result)
         }
     }
 
@@ -144,7 +164,11 @@ class SafeSearchEnforcementTest {
             "travel guide to portugal",
             "financial analyst career path",
             "classical music documentary",
-            "high resolution wallpaper 4k"
+            "high resolution wallpaper 4k",
+            "netlify",
+            "github",
+            "react",
+            "how to deploy to netlify"
         )
 
         for (query in safeEducationalQueries) {
