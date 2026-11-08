@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">QuitNow</string>
-    <string name="accessibility_service_description">QuitNow uses this service only to detect when a blocked app is opened and show a calm reminder screen. It never reads or logs screen text, personal messages, or keystrokes.</string>
+    <string name="app_name">FocusCrew</string>
+    <string name="accessibility_service_description">FocusCrew uses this service only to detect when a blocked app is opened and show a calm reminder screen. It never reads or logs screen text, personal messages, or keystrokes.</string>
 </resources>
