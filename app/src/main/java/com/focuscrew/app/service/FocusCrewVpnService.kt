@@ -146,29 +146,20 @@ class FocusCrewVpnService : VpnService() {
             builder.addDnsServer(DNS_VIRTUAL_SERVER)
             builder.addRoute(DNS_VIRTUAL_SERVER, 32)
 
-            // Intercept standard public DNS servers so direct browser queries to 8.8.8.8 / 1.1.1.1
-            // are filtered and SafeSearch cannot be bypassed
-            try { builder.addRoute("8.8.8.8", 32) } catch (_: Exception) {}
-            try { builder.addRoute("8.8.4.4", 32) } catch (_: Exception) {}
-            try { builder.addRoute("1.1.1.1", 32) } catch (_: Exception) {}
-            try { builder.addRoute("1.0.0.1", 32) } catch (_: Exception) {}
-            try { builder.addRoute("9.9.9.9", 32) } catch (_: Exception) {}
-            try { builder.addRoute("208.67.222.222", 32) } catch (_: Exception) {}
-            try { builder.addRoute("208.67.220.220", 32) } catch (_: Exception) {}
-
-            // IPv6 DNS endpoint & routes so 5G carrier IPv6 DNS queries never leak or bypass the VPN!
+            // IPv6 DNS endpoint & route so 5G carrier IPv6 DNS queries never leak or bypass the VPN
             try {
                 builder.addAddress(VPN_LOCAL_IPV6, 128)
                 builder.addDnsServer(DNS_VIRTUAL_SERVER_IPV6)
                 builder.addRoute(DNS_VIRTUAL_SERVER_IPV6, 128)
-                builder.addRoute("2001:4860:4860::8888", 128)
-                builder.addRoute("2001:4860:4860::8844", 128)
-                builder.addRoute("2606:4700:4700::1111", 128)
-                builder.addRoute("2606:4700:4700::1001", 128)
             } catch (e: Exception) {
                 Log.w(TAG, "IPv6 route setup: ${e.message}")
             }
 
+            // CRITICAL: Allow apps (browsers) to bypass the VPN for all non-VPN traffic!
+            // This ensures that actual web browsing (HTTP/HTTPS to GitHub, Wikipedia, Google, YouTube, etc.)
+            // connects directly through physical Wi-Fi/Cellular at 100% full speed, while DNS lookups
+            // are strictly routed to 10.245.0.2 for adult content blackholing & SafeSearch VIP locking.
+            builder.allowBypass()
             builder.setBlocking(true)
 
             // STRICT PER-APP SPLIT TUNNEL:
@@ -196,9 +187,6 @@ class FocusCrewVpnService : VpnService() {
             }
 
             vpnInterface = builder.establish()
-            try {
-                setUnderlyingNetworks(null)
-            } catch (_: Exception) {}
 
             if (vpnInterface == null) {
                 Log.e(TAG, "VPN interface could not be established")
