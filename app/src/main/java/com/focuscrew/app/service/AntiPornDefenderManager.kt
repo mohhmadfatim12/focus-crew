@@ -112,7 +112,13 @@ object AntiPornDefenderManager {
 
     fun isNonBrowserApp(packageName: String): Boolean {
         if (packageName.isBlank()) return false
-        if (isSearchOrBrowserApp(packageName)) return false
+        val lower = packageName.lowercase()
+        if (lower == "com.google.android.googlequicksearchbox" ||
+            lower == "com.google.android.apps.searchlite" ||
+            lower.contains("searchbox") ||
+            SUPPORTED_BROWSER_PACKAGES.contains(packageName)) {
+            return false
+        }
         if (NON_BROWSER_PACKAGES.contains(packageName)) return true
         val lower = packageName.lowercase()
         return lower.contains("whatsapp") ||
@@ -270,11 +276,13 @@ object AntiPornDefenderManager {
 
     fun isSearchOrBrowserApp(packageName: String): Boolean {
         if (packageName.isBlank()) return false
-        if (isBrowserPackage(packageName)) return true
         val lower = packageName.lowercase()
-        return lower == "com.google.android.googlequicksearchbox" ||
-               lower == "com.google.android.apps.searchlite" ||
-               lower.contains("searchbox")
+        if (lower == "com.google.android.googlequicksearchbox" ||
+            lower == "com.google.android.apps.searchlite" ||
+            lower.contains("searchbox")) {
+            return true
+        }
+        return isBrowserPackage(packageName)
     }
 
     fun isSearchDomainOrEngine(currentUrl: String?, rootNode: AccessibilityNodeInfo?): Boolean {
