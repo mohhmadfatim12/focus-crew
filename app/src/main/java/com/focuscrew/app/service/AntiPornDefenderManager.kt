@@ -598,8 +598,12 @@ object AntiPornDefenderManager {
         collectVisibleTexts(rootNode, allTexts, depth = 0, maxDepth = 40)
         val combined = allTexts.joinToString(" ").lowercase()
 
-        val isSafeSearchContext = (combined.contains("google.com/safesearch") ||
-            (combined.contains("explicit results filter") && combined.contains("safesearch")) ||
+        val isSafeSearchContext = (currentUrl?.contains("/safesearch") == true ||
+            currentUrl?.contains("/preferences") == true ||
+            currentUrl?.contains("/setprefs") == true ||
+            combined.contains("google.com/safesearch") ||
+            (combined.contains("safesearch") && (combined.contains("manage explicit content") || combined.contains("choose whether to filter") || combined.contains("filter"))) ||
+            (combined.contains("filter") && (combined.contains("blur") || combined.contains("off"))) ||
             (combined.contains("bing.com/account") && combined.contains("safesearch")) ||
             (combined.contains("duckduckgo.com/settings") && combined.contains("safe search")))
 
@@ -618,13 +622,15 @@ object AntiPornDefenderManager {
                 t.equals("Strict", ignoreCase = true) ||
                 t.startsWith("Filter (", ignoreCase = true) ||
                 t.startsWith("Strict (", ignoreCase = true) ||
+                t.contains("Filter explicit", ignoreCase = true) ||
                 (t.contains("Filter", ignoreCase = true) && (t.contains("explicit", ignoreCase = true) || t.contains("hide", ignoreCase = true))) ||
                 d.equals("Filter", ignoreCase = true) ||
-                d.equals("Strict", ignoreCase = true)
+                d.equals("Strict", ignoreCase = true) ||
+                d.contains("Filter explicit", ignoreCase = true)
 
             if (isMatch) {
                 filterNode = node
-                if (node.isChecked) {
+                if (node.isChecked || node.isSelected) {
                     isFilterChecked = true
                 }
                 return
@@ -649,10 +655,12 @@ object AntiPornDefenderManager {
                 t.equals("Blur", ignoreCase = true) ||
                 t.equals("Moderate", ignoreCase = true) ||
                 t.startsWith("Off (", ignoreCase = true) ||
+                t.contains("Turn off", ignoreCase = true) ||
+                t.contains("Off (show explicit", ignoreCase = true) ||
                 d.equals("Off", ignoreCase = true) ||
                 d.equals("Blur", ignoreCase = true)
 
-            if (isOffOrBlur && node.isChecked) {
+            if (isOffOrBlur && (node.isChecked || node.isSelected)) {
                 isOffOrBlurChecked = true
                 return
             }
@@ -674,13 +682,25 @@ object AntiPornDefenderManager {
                 // Try parent nodes
                 var p = filterNode!!.parent
                 var depth = 0
-                while (p != null && depth < 4 && !clicked) {
+                while (p != null && depth < 5 && !clicked) {
                     if (p.isClickable || p.isCheckable) {
                         clicked = p.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                         break
                     }
                     p = p.parent
                     depth++
+                }
+            }
+            if (!clicked) {
+                val parent = filterNode!!.parent
+                if (parent != null) {
+                    for (i in 0 until parent.childCount) {
+                        val sibling = parent.getChild(i) ?: continue
+                        if (sibling.isCheckable || sibling.isClickable) {
+                            clicked = sibling.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            if (clicked) break
+                        }
+                    }
                 }
             }
             if (clicked) {

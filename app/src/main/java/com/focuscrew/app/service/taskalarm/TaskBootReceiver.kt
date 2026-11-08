@@ -20,6 +20,14 @@ class TaskBootReceiver : BroadcastReceiver() {
         ) {
             Log.d("TaskBootReceiver", "Boot completed / package replaced. Rescheduling active task alarms...")
 
+            // Auto-start SafeSearch VIP Shield on device boot if permitted
+            try {
+                com.focuscrew.app.service.FocusCrewVpnService.initialize(context)
+                com.focuscrew.app.service.FocusCrewVpnService.autoStartIfPermitted(context)
+            } catch (e: Exception) {
+                Log.w("TaskBootReceiver", "Failed to auto-start VPN on boot: ${e.message}")
+            }
+
             val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
                 try {

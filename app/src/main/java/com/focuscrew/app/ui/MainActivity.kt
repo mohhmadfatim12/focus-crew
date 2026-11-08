@@ -95,6 +95,14 @@ import com.focuscrew.app.ui.paywall.PaywallScreen
 import com.focuscrew.app.ui.security.AppLockScreen
 import com.focuscrew.app.data.repository.TaskAlarmRepository
 import com.focuscrew.app.ui.taskalarm.TaskAlarmScreen
+import android.app.Activity
+import android.net.VpnService
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.text.style.TextAlign
 
 enum class AppScreen {
     TIMER,
@@ -244,6 +252,19 @@ private fun MainContent(
         mutableStateOf(!isServiceConnected && !OnboardingPreferences.hasCompleted(context))
     }
 
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            FocusCrewVpnService.setVpnEnabled(true)
+            val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
+            context.startService(vpnIntent)
+            Toast.makeText(context, "🛡️ SafeSearch Fortress Armed: Filter Locked 24/7", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    var showSafeSearchLockPrompt by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         BlockerManager.initialize(context)
         BlockProfileManager.initialize(context)
@@ -253,12 +274,26 @@ private fun MainContent(
         AntiPornDefenderManager.setDefenderEnabled(true)
         AntiPornDefenderManager.setSafeSearchEnforced(true)
         FocusCrewVpnService.initialize(context)
+        FocusCrewVpnService.setVpnEnabled(true)
         FocusCrewVpnService.autoStartIfPermitted(context)
         TrialSubscriptionManager.initialize(context)
         AppSecurityManager.initialize(context)
         ReelNotificationManager.createNotificationChannel(context)
         if (reelStats.isNotificationEnabled) {
             ReelNotificationManager.updateNotification(context, reelStats)
+        }
+    }
+
+    LaunchedEffect(isServiceConnected, showOnboarding, showNeuroAuditOnboarding) {
+        if (!showOnboarding && !showNeuroAuditOnboarding) {
+            val prepareIntent = VpnService.prepare(context)
+            if (prepareIntent != null) {
+                showSafeSearchLockPrompt = true
+            } else {
+                FocusCrewVpnService.setVpnEnabled(true)
+                val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
+                context.startService(vpnIntent)
+            }
         }
     }
 
@@ -297,6 +332,54 @@ private fun MainContent(
     } else if (showOnboarding) {
         OnboardingPermissionDialog(
             onDismiss = { showOnboarding = false }
+        )
+    }
+
+    if (showSafeSearchLockPrompt && !showOnboarding && !showNeuroAuditOnboarding) {
+        AlertDialog(
+            onDismissRequest = { /* Mandatory shield - enforce explicit activation */ },
+            icon = { Text("🔒", fontSize = 32.sp) },
+            title = {
+                Text(
+                    text = "Mandatory SafeSearch Lock",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "To guarantee 100% protection against adult searches and explicit image results, FocusCrew locks Google and Bing SafeSearch on 'Filter' across all browsers.",
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    Text(
+                        text = "Tap 'Lock SafeSearch on Filter' and select 'OK' on Android's system prompt to activate 24/7 on-device protection.",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val prepareIntent = VpnService.prepare(context)
+                        if (prepareIntent != null) {
+                            vpnPermissionLauncher.launch(prepareIntent)
+                        } else {
+                            FocusCrewVpnService.setVpnEnabled(true)
+                            val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
+                            context.startService(vpnIntent)
+                        }
+                        showSafeSearchLockPrompt = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Lock SafeSearch on Filter", fontWeight = FontWeight.Bold)
+                }
+            }
         )
     }
 
