@@ -208,247 +208,41 @@ fun AppPickerScreen(
         )
     }
 
+    val toggleDopamineDetox: (Boolean) -> Unit = { newState ->
+        AntiPornDefenderManager.setDefenderEnabled(newState)
+        AntiPornDefenderManager.setSafeSearchEnforced(newState)
+        FocusCrewVpnService.setVpnEnabled(newState)
+        if (newState) {
+            val prepare = android.net.VpnService.prepare(context)
+            if (prepare == null) {
+                val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
+                context.startService(vpnIntent)
+            } else {
+                vpnPermissionLauncher.launch(prepare)
+            }
+        } else {
+            val vpnIntent = Intent(context, FocusCrewVpnService::class.java).apply {
+                action = "STOP_VPN"
+            }
+            context.startService(vpnIntent)
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // 0. ACCESSIBILITY PERMISSION WARNING (If disabled)
-        if (!isServiceConnected) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clickable {
-                        try {
-                            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                            context.startActivity(intent)
-                        } catch (_: Exception) {}
-                    }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("⚠️", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Accessibility Service is OFF. Tap here to turn it ON so apps can be blocked.",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
-        // 0. TIMER / SHIELD STATUS BANNER
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = if (isAlwaysOnBlocking || isTimerActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            border = BorderStroke(
-                1.dp,
-                if (isAlwaysOnBlocking || isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = when {
-                        isAlwaysOnBlocking -> "⚡"
-                        isTimerActive -> "⏱️"
-                        else -> "ℹ️"
-                    },
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = when {
-                        isAlwaysOnBlocking -> "24/7 Shield Active — Selected apps are continuously locked."
-                        isTimerActive -> "Focus Timer Running — Selected apps are locked."
-                        else -> "Timer Mode — Selected apps are locked during focus sessions."
-                    },
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isAlwaysOnBlocking || isTimerActive) MaterialTheme.colorScheme.onPrimaryContainer
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
         Spacer(modifier = Modifier.height(4.dp))
 
-        // 1. DOPAMINE DETOX BLOCKER (Clean, Minimalist Bar)
-            val toggleDopamineDetox: (Boolean) -> Unit = { newState ->
-                AntiPornDefenderManager.setDefenderEnabled(newState)
-                AntiPornDefenderManager.setSafeSearchEnforced(newState)
-                FocusCrewVpnService.setVpnEnabled(newState)
-                if (newState) {
-                    val prepare = android.net.VpnService.prepare(context)
-                    if (prepare == null) {
-                        val vpnIntent = Intent(context, FocusCrewVpnService::class.java)
-                        context.startService(vpnIntent)
-                    } else {
-                        vpnPermissionLauncher.launch(prepare)
-                    }
-                } else {
-                    val vpnIntent = Intent(context, FocusCrewVpnService::class.java).apply {
-                        action = "STOP_VPN"
-                    }
-                    context.startService(vpnIntent)
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (isDopamineDetoxEnabled) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                },
-                border = BorderStroke(
-                    1.dp,
-                    if (isDopamineDetoxEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .clickable {
-                        toggleDopamineDetox(!isDopamineDetoxEnabled)
-                    }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = if (isDopamineDetoxEnabled) "🛡️" else "⚪",
-                            fontSize = 16.sp
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Dopamine Detox Blocker",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1
-                        )
-                    }
-
-                    Switch(
-                        checked = isDopamineDetoxEnabled,
-                        onCheckedChange = { newState ->
-                            toggleDopamineDetox(newState)
-                        },
-                        modifier = Modifier.scale(0.8f),
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
-            }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 2. APP BLOCKER MODE (Always-On 24/7 Shield vs Timer-Only)
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (isAlwaysOnBlocking) {
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            },
-            border = BorderStroke(
-                1.dp,
-                if (isAlwaysOnBlocking) MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)
-                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clickable {
-                    BlockerManager.setAlwaysOnBlocking(!isAlwaysOnBlocking)
-                }
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = if (isAlwaysOnBlocking) "⚡" else "⏱️",
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = if (isAlwaysOnBlocking) "24/7 Always-On Shield" else "Timer-Only Blocking",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = if (isAlwaysOnBlocking) "Blocked apps restricted continuously" else "Blocked apps restricted only during timer sessions",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                Switch(
-                    checked = isAlwaysOnBlocking,
-                    onCheckedChange = { newState ->
-                        BlockerManager.setAlwaysOnBlocking(newState)
-                    },
-                    modifier = Modifier.scale(0.8f),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.onSecondary,
-                        checkedTrackColor = MaterialTheme.colorScheme.secondary
-                    )
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 3. FULL-WIDTH CLEAN SEARCH BAR (Zero clutter, zero duplicate counters)
+        // 1. PINNED SEARCH BAR (Compact & Clean right under top bar)
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp)
+                .height(42.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -490,10 +284,9 @@ fun AppPickerScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // 3. CLEAN FILTER TABS (Simple, easy to read, no clutter)
-        // 3. CLEAN 2-TAB FILTER SELECTOR (Simple, balanced, zero clutter)
+        // 2. PINNED FILTER TABS (All Apps vs Blocked Only)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -514,7 +307,7 @@ fun AppPickerScreen(
                     fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium,
                     color = if (isAllSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(vertical = 7.dp)
                 )
             }
 
@@ -538,12 +331,12 @@ fun AppPickerScreen(
                     fontWeight = if (isBlockedSelected) FontWeight.Bold else FontWeight.Medium,
                     color = if (isBlockedSelected) MaterialTheme.colorScheme.onError else if (blockedPackages.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(vertical = 7.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // 4. FULL-SCREEN LAZYCOLUMN (Apps immediately start with compact spacing)
         if (isLoading) {
@@ -569,8 +362,123 @@ fun AppPickerScreen(
                     .fillMaxWidth()
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp)
+                contentPadding = PaddingValues(top = 2.dp, bottom = 96.dp)
             ) {
+                // 1. Accessibility Service Warning (Scrollable)
+                if (!isServiceConnected) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clickable {
+                                    try {
+                                        val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {}
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("⚠️", fontSize = 13.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Accessibility Service is OFF. Tap here to enable.",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 2. Compact Control Card for Blocker Modes (Scrolls with list)
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)) {
+                            // Row 1: Dopamine Detox Blocker
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { toggleDopamineDetox(!isDopamineDetoxEnabled) }
+                                    .padding(vertical = 1.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Text(if (isDopamineDetoxEnabled) "🛡️" else "⚪", fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text("Dopamine Detox", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("SafeSearch & adult site shield", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                Switch(
+                                    checked = isDopamineDetoxEnabled,
+                                    onCheckedChange = { toggleDopamineDetox(it) },
+                                    modifier = Modifier.scale(0.72f),
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(0.5.dp)
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                Surface(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), modifier = Modifier.fillMaxSize()) {}
+                            }
+
+                            // Row 2: 24/7 Shield vs Timer-Only
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { BlockerManager.setAlwaysOnBlocking(!isAlwaysOnBlocking) }
+                                    .padding(vertical = 1.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Text(if (isAlwaysOnBlocking) "⚡" else "⏱️", fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(if (isAlwaysOnBlocking) "24/7 Shield" else "Timer-Only", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(if (isAlwaysOnBlocking) "Selected apps locked continuously" else "Locked only during timer sessions", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                Switch(
+                                    checked = isAlwaysOnBlocking,
+                                    onCheckedChange = { BlockerManager.setAlwaysOnBlocking(it) },
+                                    modifier = Modifier.scale(0.72f),
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.onSecondary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.secondary
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
                 if (isTimerActive) {
                     item {
                         Surface(
