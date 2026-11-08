@@ -215,7 +215,62 @@ object AntiPornDefenderManager {
                lower.contains("172.28.") || lower.contains("172.29.") || lower.contains("172.30.") ||
                lower.contains("172.31.") ||
                lower.contains(".local") ||
-               lower.contains("::1")
+               lower.contains("::1") ||
+               lower.startsWith("chrome://") ||
+               lower.startsWith("chrome-native://") ||
+               lower.startsWith("about:") ||
+               lower.startsWith("edge://") ||
+               lower.startsWith("brave://")
+    }
+
+    /**
+     * Checks if the active browser screen is a History / Clear Browsing Data screen.
+     * Prevents false-positive blocking when the user is simply reviewing their past browsing history
+     * or clearing their browsing data.
+     * Adult domains are strictly blocked when actually visited or clicked, not while merely listed in history.
+     */
+    fun isBrowserHistoryScreen(currentUrl: String?, rootNode: AccessibilityNodeInfo?): Boolean {
+        if (!currentUrl.isNullOrBlank()) {
+            val lowerUrl = currentUrl.lowercase().trim()
+            if (lowerUrl.contains("history") ||
+                lowerUrl.startsWith("chrome://history") ||
+                lowerUrl.startsWith("chrome-native://history") ||
+                lowerUrl.startsWith("about:history") ||
+                lowerUrl.startsWith("edge://history") ||
+                lowerUrl.startsWith("brave://history")
+            ) {
+                return true
+            }
+        }
+
+        if (rootNode == null) return false
+
+        try {
+            // 1. Check known history view IDs in Chrome and Chromium-based browsers
+            val historyIds = listOf(
+                "com.android.chrome:id/history_page",
+                "com.android.chrome:id/history_item",
+                "com.android.chrome:id/clear_browsing_data_button",
+                "com.android.chrome:id/clear_browsing_data",
+                "com.android.chrome:id/history_ui",
+                "com.android.chrome:id/history_row_item"
+            )
+            for (id in historyIds) {
+                val nodes = rootNode.findAccessibilityNodeInfosByViewId(id)
+                if (!nodes.isNullOrEmpty()) return true
+            }
+
+            // 2. Check for clear browsing data text markers
+            val clearNodes = rootNode.findAccessibilityNodeInfosByText("Clear browsing data")
+            if (!clearNodes.isNullOrEmpty()) return true
+
+            // 3. Check for search history text markers
+            val searchHistoryNodes = rootNode.findAccessibilityNodeInfosByText("Search history")
+            if (!searchHistoryNodes.isNullOrEmpty()) return true
+
+        } catch (_: Exception) {}
+
+        return false
     }
 
     fun initialize(context: Context) {
@@ -337,6 +392,11 @@ object AntiPornDefenderManager {
      */
     fun scanBrowserForAdultContent(rootNode: AccessibilityNodeInfo?): String? {
         if (rootNode == null) return null
+
+        val activeUrl = extractActiveBrowserUrl(rootNode)
+        if (isLocalOrExemptUrl(activeUrl ?: "") || isBrowserHistoryScreen(activeUrl, rootNode)) {
+            return null
+        }
 
         // 1. Fast check against known URL / Search bar IDs
         for (viewId in KNOWN_URL_BAR_IDS) {

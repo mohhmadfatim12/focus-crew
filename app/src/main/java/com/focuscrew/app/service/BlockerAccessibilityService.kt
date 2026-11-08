@@ -367,7 +367,9 @@ class BlockerAccessibilityService : AccessibilityService() {
             val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
 
             // CRITICAL: Localhost or internal test servers are 100% exempt from SafeSearch locks!
-            if (activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) {
+            if ((activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) ||
+                AntiPornDefenderManager.isBrowserHistoryScreen(activeUrl, browserRoot)
+            ) {
                 return
             }
 
@@ -444,8 +446,10 @@ class BlockerAccessibilityService : AccessibilityService() {
             val browserRoot = getActiveBrowserRootNode(event)
             val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
 
-            // CRITICAL: Localhost / internal test servers are 100% exempt from adult blocker checks
-            if (activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) {
+            // CRITICAL: Localhost, internal test servers, and browser history screens are 100% exempt from adult blocker checks
+            if ((activeUrl != null && AntiPornDefenderManager.isLocalOrExemptUrl(activeUrl)) ||
+                AntiPornDefenderManager.isBrowserHistoryScreen(activeUrl, browserRoot)
+            ) {
                 return
             }
 

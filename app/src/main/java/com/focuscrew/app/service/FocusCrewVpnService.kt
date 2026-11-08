@@ -618,7 +618,10 @@ class FocusCrewVpnService : VpnService() {
                d == "android.com" || d.endsWith(".android.com") ||
                d == "wikipedia.org" || d.endsWith(".wikipedia.org") ||
                d == "github.com" || d.endsWith(".github.com") ||
-               d == "stackoverflow.com" || d.endsWith(".stackoverflow.com")
+               d == "stackoverflow.com" || d.endsWith(".stackoverflow.com") ||
+               d == "dns.google" || d.endsWith(".dns.google") ||
+               d == "cloudflare-dns.com" || d.endsWith(".cloudflare-dns.com") ||
+               d == "one.one.one.one"
     }
 
     /**
