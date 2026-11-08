@@ -1,5 +1,11 @@
 package com.focuscrew.app.service
 
+/**
+ * 🔒 FROZEN MODULE — VERIFIED & LOCKED (v1.0.0-stable)
+ * DO NOT MODIFY THIS FILE WITHOUT EXPLICIT OPERATOR APPROVAL.
+ * Core VPN DNS interception engine, SafeSearch VIP redirection, and browser/search split-tunnel.
+ */
+
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences

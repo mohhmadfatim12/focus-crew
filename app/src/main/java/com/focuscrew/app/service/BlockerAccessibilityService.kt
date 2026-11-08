@@ -1,5 +1,11 @@
 package com.focuscrew.app.service
 
+/**
+ * 🔒 FROZEN MODULE — VERIFIED & LOCKED (v1.0.0-stable)
+ * DO NOT MODIFY THIS FILE WITHOUT EXPLICIT OPERATOR APPROVAL.
+ * Core accessibility blocker: SafeSearch settings detection/exit, adult query clearing, and reel gesture detection.
+ */
+
 import android.accessibilityservice.AccessibilityService
 import android.app.ActivityOptions
 import android.app.PendingIntent

@@ -1,5 +1,11 @@
 package com.focuscrew.app.service
 
+/**
+ * 🔒 FROZEN MODULE — VERIFIED & LOCKED (v1.0.0-stable)
+ * DO NOT MODIFY THIS FILE WITHOUT EXPLICIT OPERATOR APPROVAL.
+ * Core SafeSearch filter enforcer, Google QuickSearchBox integration, and acyclic resolution.
+ */
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context

@@ -45,3 +45,27 @@ Welcome to **FocusCrew** (provisional name). This document sets the operating ru
   - After completing any task, provide simple, numbered, step-by-step instructions on how the user can build, deploy, and verify the feature on their physical Android device.
 - **Decision Tracking:**
   - Whenever an architectural, technical, or UX decision is made or changed, immediately log it in [08-decision-log.md](file:///c:/cdrive files/OneDrive/Desktop/ANORIDE APP/docs/08-decision-log.md).
+
+---
+
+## 3. PERMANENT CODE FREEZE: SafeSearch & Anti-Porn Defender (LOCKED)
+
+> [!CAUTION]
+> **CRITICAL STABILITY RULE — STRICTLY FROZEN MODULES:**
+> The following four files form the verified, production-stable SafeSearch and Anti-Porn protection engine (Tag `v1.0.0-stable`). They took extensive verification to balance zero false-positives with mandatory Google Search App SafeSearch locking. **DO NOT MODIFY OR TOUCH THESE MODULES** without explicit operator request:
+>
+> 1. `FocusCrewVpnService.kt`:
+>    - Split-tunnel routing for browsers & Google QuickSearchBox (`com.google.android.googlequicksearchbox`).
+>    - DNS layer redirection to Google SafeSearch VIP (`forcesafesearch.google.com` / `216.239.38.120`), Bing VIP (`204.79.197.220`), and DuckDuckGo VIP (`52.142.124.215`).
+> 2. `AntiPornDefenderManager.kt`:
+>    - `isNonBrowserApp` & `isSearchOrBrowserApp` acyclic resolution.
+>    - `isSearchDomainOrEngine` check supporting search queries in URL bars.
+>    - Google QuickSearchBox search field view IDs.
+>    - Proactive `[ Filter ]` chip locking.
+> 3. `BlockerAccessibilityService.kt`:
+>    - SafeSearch settings detection and instant nuclear exit.
+>    - Adult query clearing and hard block enforcement.
+>    - Event source tree traversal fallback.
+> 4. `FuzzyAdultContentDetector.kt`:
+>    - Strict adjacent compound phrase matching (`part1 + part2`).
+>    - Curated danger N-grams and innocent words allowlist.

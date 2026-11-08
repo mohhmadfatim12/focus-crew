@@ -1,6 +1,9 @@
 package com.focuscrew.app.domain
 
 /**
+ * 🔒 FROZEN MODULE — VERIFIED & LOCKED (v1.0.0-stable)
+ * DO NOT MODIFY THIS FILE WITHOUT EXPLICIT OPERATOR APPROVAL.
+ *
  * FuzzyAdultContentDetector — Military-grade adult content detection engine.
  *
  * 4-Layer detection pipeline:
