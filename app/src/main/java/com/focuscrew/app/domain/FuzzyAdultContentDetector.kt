@@ -107,7 +107,11 @@ object FuzzyAdultContentDetector {
         "therapist", "assessment", "scunthorpe", "dickens",
         "squirrel", "throat", "razer", "rate", "focus", "vault", "note", "app", "apps",
         "whatsapp", "game", "games", "fire", "freefire", "pubg", "youtube", "google", "android", "settings",
-        "netlify", "github", "render", "vercel", "gitlab", "npm", "pnpm", "node", "react"
+        "netlify", "github", "render", "vercel", "gitlab", "npm", "pnpm", "node", "react",
+        "container", "containers", "contain", "contains", "maintain", "maintainer", "maintaining",
+        "fountain", "plantain", "mountain", "bandage", "bandages", "filter", "filters", "filtering",
+        "blur", "blurred", "blurry", "camera", "photo", "image", "images", "wallpaper", "video", "videos",
+        "job", "jobs", "three", "some", "hand", "foot", "cream", "pie"
     )
 
     /**
@@ -274,35 +278,31 @@ object FuzzyAdultContentDetector {
      */
     private val DANGER_NGRAMS: Set<String> = setOf(
         "xxx", "xxxx",
-        "porn",
-        "xvideo", "xnxx", "xham",
-        "henta", "ntai",
-        "blowj", "lowjo",
-        "gangb", "angba",
-        "deept", "eepth",
-        "cumsh", "umshot",
-        "bukka", "ukkak",
-        "handj", "footj", "titjo",
-        "bonda", "ndag",
-        "squirt", // Not 'squir' which triggers on 'squirrel'
-        "voyeu", "oyeur",
-        "mastur", "asturb",
-        "orgasm", "rgasm",
-        "fappi", "wanki", "gooni",
-        "nhent", "ehent",
-        "chaturbat", "livejasm",
-        "onlyfans", // Not 'onlyf' which triggers on 'only for'
-        "brazzer", // Not 'razer' which triggers on Razer gaming gear
+        "porn", "porno",
+        "xvideo", "xnxx", "xhamster",
+        "hentai",
+        "blowjob", "gangbang", "deepthroat",
+        "cumshot", "bukkake",
+        "handjob", "footjob", "titjob",
+        "bondage",
+        "squirt",
+        "voyeur",
+        "masturbat",
+        "orgasm",
+        "fapping", "wanking", "gooning",
+        "nhentai", "ehentai",
+        "chaturbat", "livejasmin",
+        "onlyfans",
+        "brazzers",
         "xrated"
     )
 
     /**
-     * Compound n-gram pairs — both parts must appear within the text.
-     * Reduces false positives for words like "cream" or "strip" alone.
+     * Compound n-gram pairs — both parts must appear directly adjacent within the text.
+     * Prevents false positives when words appear in different sentences.
      */
     private val COMPOUND_NGRAMS: List<Pair<String, String>> = listOf(
         "cream" to "pie",
-        "three" to "some",
         "strip" to "tease",
         "gang" to "bang",
         "deep" to "throat",
@@ -463,7 +463,8 @@ object FuzzyAdultContentDetector {
 
     private fun checkCompoundNgrams(text: String): String? {
         for ((part1, part2) in COMPOUND_NGRAMS) {
-            if (text.contains(part1) && text.contains(part2)) {
+            val adjacent = part1 + part2
+            if (text.contains(adjacent)) {
                 return "$part1+$part2"
             }
         }

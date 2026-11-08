@@ -232,9 +232,11 @@ class FocusCrewVpnService : VpnService() {
         val browsers = mutableSetOf<String>()
         val pm = context.packageManager
 
-        // All standard known Android web browsers
+        // All standard known Android web browsers and official search engines
         val knownBrowsers = listOf(
             "com.android.chrome",
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.apps.searchlite",
             "com.chrome.beta",
             "com.chrome.canary",
             "com.chrome.dev",

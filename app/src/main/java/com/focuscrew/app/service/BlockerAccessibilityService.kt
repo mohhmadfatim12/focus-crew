@@ -357,7 +357,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         // ── PROACTIVE SAFESEARCH FILTER LOCK & BLOCKER (NUCLEAR) ──
         // This runs on EVERY event in a browser or search app to enforce FILTER mode!
         if (activeBrowser != null && AntiPornDefenderManager.isSafeSearchEnforced.value) {
-            val browserRoot = getActiveBrowserRootNode()
+            val browserRoot = getActiveBrowserRootNode(event)
             val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
 
             // CRITICAL: Localhost or internal test servers are 100% exempt from SafeSearch locks!
@@ -435,7 +435,7 @@ class BlockerAccessibilityService : AccessibilityService() {
             !isEssentialSafePackage(rawPackageName) &&
             rawPackageName != packageName
         ) {
-            val browserRoot = getActiveBrowserRootNode()
+            val browserRoot = getActiveBrowserRootNode(event)
             val activeUrl = AntiPornDefenderManager.extractActiveBrowserUrl(browserRoot)
 
             // CRITICAL: Localhost / internal test servers are 100% exempt from adult blocker checks
@@ -671,6 +671,10 @@ class BlockerAccessibilityService : AccessibilityService() {
             if (browserRoot != null) {
                 val urlBarNodes = browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/url_bar")
                     ?: browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/search_box_text")
+                    ?: browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/googleapp_search_box")
+                    ?: browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/open_search_view_edit_text")
+                    ?: browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/search_src_text")
+                    ?: browserRoot.findAccessibilityNodeInfosByViewId("$browserPackage:id/search_box")
                 urlBarNodes?.firstOrNull()?.let { node ->
                     val arguments = android.os.Bundle().apply {
                         putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
@@ -689,7 +693,7 @@ class BlockerAccessibilityService : AccessibilityService() {
         mainHandler.postDelayed({
             val root = try { rootInActiveWindow } catch (_: Exception) { null }
             val activePkg = root?.packageName?.toString() ?: ""
-            if (AntiPornDefenderManager.isBrowserPackage(activePkg)) {
+            if (AntiPornDefenderManager.isSearchOrBrowserApp(activePkg)) {
                 val stillDetected = AntiPornDefenderManager.scanBrowserForAdultContent(root)
                 if (stillDetected != null) {
                     performGlobalAction(GLOBAL_ACTION_HOME)
@@ -803,8 +807,8 @@ class BlockerAccessibilityService : AccessibilityService() {
         mainHandler.postDelayed({
             val root = try { rootInActiveWindow } catch (_: Exception) { null }
             val activePkg = root?.packageName?.toString() ?: ""
-            // If still inside a browser, the page might still be showing — go HOME!
-            if (AntiPornDefenderManager.isBrowserPackage(activePkg)) {
+            // If still inside a browser or search app, the page might still be showing — go HOME!
+            if (AntiPornDefenderManager.isSearchOrBrowserApp(activePkg)) {
                 val browserRoot = getActiveBrowserRootNode()
                 val stillOnSafeSearchPage = AntiPornDefenderManager.detectSafeSearchSettingsPage(browserRoot)
                 if (stillOnSafeSearchPage != null) {
@@ -948,12 +952,22 @@ class BlockerAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun getActiveBrowserRootNode(): AccessibilityNodeInfo? {
+    private fun getActiveBrowserRootNode(event: AccessibilityEvent? = null): AccessibilityNodeInfo? {
         val root = try { rootInActiveWindow } catch (_: Exception) { null }
         if (root != null && AntiPornDefenderManager.isSearchOrBrowserApp(root.packageName?.toString() ?: "")) {
             return root
         }
-        return null
+        val source = try { event?.source } catch (_: Exception) { null }
+        if (source != null) {
+            var current: AccessibilityNodeInfo? = source
+            while (current?.parent != null) {
+                current = current.parent
+            }
+            if (current != null && AntiPornDefenderManager.isSearchOrBrowserApp(current.packageName?.toString() ?: "")) {
+                return current
+            }
+        }
+        return root
     }
 
     companion object {

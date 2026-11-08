@@ -112,6 +112,7 @@ object AntiPornDefenderManager {
 
     fun isNonBrowserApp(packageName: String): Boolean {
         if (packageName.isBlank()) return false
+        if (isSearchOrBrowserApp(packageName)) return false
         if (NON_BROWSER_PACKAGES.contains(packageName)) return true
         val lower = packageName.lowercase()
         return lower.contains("whatsapp") ||
@@ -130,8 +131,7 @@ object AntiPornDefenderManager {
                lower.contains("netflix") ||
                lower.contains("spotify") ||
                lower.contains("game") ||
-               lower.contains("launcher") ||
-               lower.contains("quicksearchbox")
+               lower.contains("launcher")
     }
 
     private val KNOWN_URL_BAR_IDS = setOf(
@@ -140,6 +140,11 @@ object AntiPornDefenderManager {
         "com.android.chrome:id/omnibox_text",
         "com.android.chrome:id/location_bar",
         "com.android.chrome:id/toolbar",
+        "com.google.android.googlequicksearchbox:id/googleapp_search_box",
+        "com.google.android.googlequicksearchbox:id/search_box",
+        "com.google.android.googlequicksearchbox:id/search_edit_frame",
+        "com.google.android.googlequicksearchbox:id/open_search_view_edit_text",
+        "com.google.android.googlequicksearchbox:id/search_src_text",
         "com.brave.browser:id/url_bar",
         "com.brave.browser:id/search_box_text",
         "com.brave.browser:id/omnibox_text",
@@ -163,7 +168,10 @@ object AntiPornDefenderManager {
                lower.endsWith(":id/omnibox_text") ||
                lower.endsWith(":id/location_bar") ||
                lower.endsWith(":id/location_bar_edit_text") ||
-               lower.endsWith(":id/toolbar_url_bar")
+               lower.endsWith(":id/toolbar_url_bar") ||
+               lower.endsWith(":id/search_src_text") ||
+               lower.contains("googleapp_search_box") ||
+               lower.contains("open_search_view_edit_text")
     }
 
     fun extractActiveBrowserUrl(rootNode: AccessibilityNodeInfo?): String? {
@@ -267,6 +275,26 @@ object AntiPornDefenderManager {
         return lower == "com.google.android.googlequicksearchbox" ||
                lower == "com.google.android.apps.searchlite" ||
                lower.contains("searchbox")
+    }
+
+    fun isSearchDomainOrEngine(currentUrl: String?, rootNode: AccessibilityNodeInfo?): Boolean {
+        val pkg = rootNode?.packageName?.toString() ?: ""
+        if (pkg == "com.google.android.googlequicksearchbox" || pkg == "com.google.android.apps.searchlite" || pkg.contains("searchbox")) {
+            return true
+        }
+        if (currentUrl.isNullOrBlank()) return true
+        val lower = currentUrl.lowercase().trim()
+        if (lower.startsWith("http://") || lower.startsWith("https://") || lower.contains(".com") || lower.contains(".org") || lower.contains(".net") || lower.contains(".co")) {
+            return lower.contains("google.") ||
+                   lower.contains("bing.com") ||
+                   lower.contains("duckduckgo.com") ||
+                   lower.contains("yahoo.com") ||
+                   lower.contains("yandex.") ||
+                   lower.contains("ecosia.org") ||
+                   lower.contains("qwant.com") ||
+                   lower.contains("startpage.com")
+        }
+        return true
     }
 
     /**
@@ -423,15 +451,8 @@ object AntiPornDefenderManager {
         }
 
         // If active URL bar is an explicit non-search domain, it is NOT a search engine settings page!
-        if (currentUrl != null) {
-            val isSearchDomain = currentUrl.contains("google.") ||
-                currentUrl.contains("bing.com") ||
-                currentUrl.contains("duckduckgo.com") ||
-                currentUrl.contains("yahoo.com") ||
-                currentUrl.contains("yandex.")
-            if (!isSearchDomain) {
-                return null
-            }
+        if (!isSearchDomainOrEngine(currentUrl, rootNode)) {
+            return null
         }
 
         // 2. Scan full window text for SafeSearch settings page indicators
@@ -582,15 +603,8 @@ object AntiPornDefenderManager {
             return false
         }
 
-        if (currentUrl != null) {
-            val isSearchDomain = currentUrl.contains("google.") ||
-                currentUrl.contains("bing.com") ||
-                currentUrl.contains("duckduckgo.com") ||
-                currentUrl.contains("yahoo.com") ||
-                currentUrl.contains("yandex.")
-            if (!isSearchDomain) {
-                return false
-            }
+        if (!isSearchDomainOrEngine(currentUrl, rootNode)) {
+            return false
         }
 
         // Check visible texts
@@ -652,6 +666,8 @@ object AntiPornDefenderManager {
             val d = node.contentDescription?.toString()?.trim() ?: ""
 
             val isOffOrBlur = t.equals("Off", ignoreCase = true) ||
+                t.equals("✓ Off", ignoreCase = true) ||
+                (t.contains("off", ignoreCase = true) && t.contains("✓")) ||
                 t.equals("Blur", ignoreCase = true) ||
                 t.equals("Moderate", ignoreCase = true) ||
                 t.startsWith("Off (", ignoreCase = true) ||
@@ -660,7 +676,8 @@ object AntiPornDefenderManager {
                 d.equals("Off", ignoreCase = true) ||
                 d.equals("Blur", ignoreCase = true)
 
-            if (isOffOrBlur && (node.isChecked || node.isSelected)) {
+            val isExplicitlySelected = node.isChecked || node.isSelected || t.contains("✓") || d.contains("selected") || d.contains("checked")
+            if (isOffOrBlur && isExplicitlySelected) {
                 isOffOrBlurChecked = true
                 return
             }
@@ -723,15 +740,8 @@ object AntiPornDefenderManager {
             return false
         }
 
-        if (currentUrl != null) {
-            val isSearchDomain = currentUrl.contains("google.") ||
-                currentUrl.contains("bing.com") ||
-                currentUrl.contains("duckduckgo.com") ||
-                currentUrl.contains("yahoo.com") ||
-                currentUrl.contains("yandex.")
-            if (!isSearchDomain) {
-                return false
-            }
+        if (!isSearchDomainOrEngine(currentUrl, rootNode)) {
+            return false
         }
 
         val source = try { event?.source } catch (_: Exception) { null }
