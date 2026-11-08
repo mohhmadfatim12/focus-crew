@@ -393,7 +393,7 @@ private fun MainContent(
     }
 
     val screenTitle = when (currentScreen) {
-        AppScreen.TIMER -> "FocusCrew"
+        AppScreen.TIMER -> "QuitNow"
         AppScreen.TASK_ALARM -> "Task Alarm"
         AppScreen.REEL_COUNTER -> "Reel Counter"
         AppScreen.APP_PICKER -> "App Blocker"
@@ -441,7 +441,7 @@ private fun MainContent(
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "FocusCrew",
+                                        text = "QuitNow",
                                         style = MaterialTheme.typography.titleLarge.copy(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 20.sp
@@ -764,7 +764,7 @@ private fun MainContent(
                             .padding(horizontal = 20.dp, vertical = 14.dp)
                     ) {
                         Text(
-                            text = "FocusCrew • 100% Offline Shield",
+                            text = "QuitNow • 100% Offline Shield",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                         )

@@ -1,4 +1,4 @@
-name: Build FocusCrew APK
+name: Build QuitNow APK
 
 on:
   push:
@@ -28,5 +28,5 @@ jobs:
     - name: Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: FocusCrew-debug-apk
+        name: QuitNow-debug-apk
         path: app/build/outputs/apk/debug/app-debug.apk
