@@ -51,21 +51,25 @@ Welcome to **FocusCrew** (provisional name). This document sets the operating ru
 ## 3. PERMANENT CODE FREEZE: SafeSearch & Anti-Porn Defender (LOCKED)
 
 > [!CAUTION]
-> **CRITICAL STABILITY RULE — STRICTLY FROZEN MODULES:**
-> The following four files form the verified, production-stable SafeSearch and Anti-Porn protection engine (Tag `v1.0.0-stable`). They took extensive verification to balance zero false-positives with mandatory Google Search App SafeSearch locking. **DO NOT MODIFY OR TOUCH THESE MODULES** without explicit operator request:
+> **CRITICAL STABILITY RULE — STRICTLY FROZEN MODULES (Claude Code, Antigravity, Cursor, Copilot):**
+> The following five files form the verified, production-stable SafeSearch and Anti-Porn protection engine (Tags `v1.0.1` / `v1.0.0-stable`, SHA-256: `969d609cc380b8e2936a6b00a90b8882e5b566e0b4d9e19e46f52253de933d16`).
+> **DO NOT MODIFY, REFACTOR, REORGANIZE, OR TOUCH THESE MODULES** without explicit operator request:
 >
 > 1. `FocusCrewVpnService.kt`:
->    - Split-tunnel routing for browsers & Google QuickSearchBox (`com.google.android.googlequicksearchbox`).
+>    - Split-tunnel routing for browsers & Google QuickSearchBox with `allowBypass()` enabled.
 >    - DNS layer redirection to Google SafeSearch VIP (`forcesafesearch.google.com` / `216.239.38.120`), Bing VIP (`204.79.197.220`), and DuckDuckGo VIP (`52.142.124.215`).
+>    - Whitelist for Tier-1 Anycast DoH resolvers (`dns.google`, `cloudflare-dns.com`).
 > 2. `AntiPornDefenderManager.kt`:
 >    - `isNonBrowserApp` & `isSearchOrBrowserApp` acyclic resolution.
->    - `isSearchDomainOrEngine` check supporting search queries in URL bars.
->    - Google QuickSearchBox search field view IDs.
->    - Proactive `[ Filter ]` chip locking.
+>    - `isBrowserHistoryScreen(currentUrl, rootNode)`: Chrome history list exemption.
+>    - `isLocalOrExemptUrl`: Internal browser URLs exemption (`chrome://`, `chrome-native://`, `about:`, `edge://`, `brave://`).
+>    - SafeSearch settings page tamper detection and proactive `[ Filter ]` chip locking.
 > 3. `BlockerAccessibilityService.kt`:
 >    - SafeSearch settings detection and instant nuclear exit.
 >    - Adult query clearing and hard block enforcement.
->    - Event source tree traversal fallback.
+>    - Chrome history exemption to allow reviewing/clearing browsing data peacefully.
 > 4. `FuzzyAdultContentDetector.kt`:
 >    - Strict adjacent compound phrase matching (`part1 + part2`).
 >    - Curated danger N-grams and innocent words allowlist.
+> 5. `AdultDomainBlocklist.kt`:
+>    - Instant 0ms DNS blackholing for 1,000+ adult domains.
